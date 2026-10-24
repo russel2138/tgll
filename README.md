@@ -61,6 +61,8 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
 | `install-display` | Tải Xvfb ARM64 và thư viện hỗ trợ (Debian, SHA256), thử X11 headless không cần root |
 | `test-graphics` | Mở Xvfb tạm, thử GLX và OpenGL CPU renderer (Mesa/llvmpipe) |
+| `game-install` | Giải nén ZIP TGLL đã upload vào thư mục game, không sửa EXE |
+| `test-game` | Thử khởi chạy TGLL tối đa 120 giây bằng Wine + Box64 + Xvfb, lưu log/CPU/RAM |
 
 | `wine-diagnose` | Kiểm tra Wine và xuất nguyên nhân lỗi `ntdll.so` qua `BOX64_LOG=2` |
 | `job` | Kiểm tra tác vụ cài đặt |
@@ -142,9 +144,47 @@ Lệnh `test-graphics` khởi động lại một màn hình Xvfb tạm, thử m
 
 Quan trọng: OpenGL native ARM64 chạy được không bảo đảm toàn bộ pipeline **Wine x64 → Box64 → Unity Direct3D/OpenGL** chạy được. Bản game cần được upload lên host và kiểm thử riêng sau bước này
 
+## Thử chạy game TGLL Windows Unity
+
+Sau khi `test-graphics` báo `SUCCESS: OpenGL context created on virtual X11 display`, tải **bản ZIP game của chính bạn** lên File Manager HidenCloud tại:
+
+```text
+/home/container/TGLL_minCPU_v2.zip
+```
+
+Launcher cũng chấp nhận tên `game.zip`. Không cần upload file game lên GitHub public, không sửa game JAR hay mã nguồn game
+
+Trong Console, chạy:
+
+```text
+update
+game-install
+logs 50
+```
+
+`game-install` kiểm tra cấu trúc ZIP, giới hạn dung lượng giải nén, từ chối đường dẫn `..` và symlink, rồi giải nén vào `/home/container/game` khi chưa có game. ZIP ban đầu được giữ nguyên
+
+Khi log có `SUCCESS: TGLL game extracted`, chạy tiếp:
+
+```text
+test-game
+logs 100
+```
+
+`test-game` chạy riêng trong background tối đa **120 giây**, tạo Xvfb tạm ở `:90` trở lên, khởi chạy `TheGioiLangLa.exe` qua Box64 và Wine 11.19, dùng Mesa software rendering, chế độ cửa sổ 640×480, không dùng `-batchmode` hoặc `-nographics`. Script lưu log:
+
+- `.tgll-runtime/game-test.log` — diễn biến thử nghiệm và mẫu CPU/RAM của toàn container
+- `.tgll-runtime/game-wine.log` — thông báo Box64/Wine
+- `.tgll-runtime/game-xvfb.log` — thông báo Xvfb
+- `game/Player.log` — log Unity nếu game tạo được file
+
+Sau 120 giây script dừng tiến trình test và Wine server dùng prefix riêng `.tgll-runtime/wineprefix-test`. `job-stop` có thể dừng sớm một tác vụ đang chạy, nhưng nếu dừng đột ngột có thể bỏ lỡ phần tổng kết log
+
+**Chú ý:** Khởi động tiến trình không có nghĩa game đã mở thành công hay đã đăng nhập. Ở bước này chưa có VNC để thao tác với game, chưa có cơ chế treo lâu dài; cần xem kết quả chạy thử trước. Box64/Wine/llvmpipe trên quota 2 vCPU có thể chạy chậm hoặc thiếu RAM
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/test_game.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
