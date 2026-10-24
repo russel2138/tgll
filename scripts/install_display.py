@@ -195,14 +195,17 @@ def main():
     if not shutil.which("dpkg-deb"):
         raise RuntimeError("Missing dpkg-deb; cannot safely extract Debian .deb packages")
     PREFIX.mkdir(parents=True, exist_ok=True)
-    if not BIN.is_file():
-        for name, url, digest, size in DEBS:
-            deb = download(name, url, digest, size)
-            log(f"Extracting {name} into private runtime...")
-            subprocess.run(["dpkg-deb", "--extract", str(deb), str(PREFIX)],
-                           check=True, timeout=90)
-    else:
-        log(f"Using existing local Xvfb: {BIN}")
+    for name, url, digest, size in DEBS:
+        marker = PREFIX / ".installed" / (name + ".ok")
+        if marker.is_file() and marker.read_text().strip() == digest:
+            log(f"Already extracted: {name}")
+            continue
+        deb = download(name, url, digest, size)
+        log(f"Extracting {name} into private runtime...")
+        subprocess.run(["dpkg-deb", "--extract", str(deb), str(PREFIX)],
+                       check=True, timeout=90)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(digest, encoding="ascii")
     if not BIN.is_file():
         raise RuntimeError(f"Expected Xvfb binary missing at {BIN}")
     env = env_for_display()
