@@ -34,6 +34,18 @@ Không cần thay đổi Startup Command mặc định. Repo public nên không 
 4. Trong Console nhập `update` để đồng bộ toàn bộ launcher, hoặc dùng file `.tgll-command` nếu Console không chuyển được stdin
 5. Sau này có thể cập nhật qua `update`, không phải upload lại code
 
+## Khôi phục nếu lệnh update báo sai "Already up to date"
+
+Nếu `help` hiển thị bản cũ dù GitHub đã có mã mới, chạy lệnh `bash` dưới đây với URL commit cố định để thay app.py, rồi `restart` và `update`:
+
+```text
+bash curl -fsSL --retry 3 https://raw.githubusercontent.com/russel2138/tgll/4f3a47323e5ee6c5568ac4b791f45ff25b602ca0/app.py -o /home/container/app.py.new && /usr/local/bin/python -m py_compile /home/container/app.py.new && mv /home/container/app.py.new /home/container/app.py
+restart
+update
+```
+
+Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHub API, sau đó tải code theo SHA bất biến, tránh cache cũ của `raw.githubusercontent.com/.../main/...`
+
 ## Các lệnh Console
 
 | Lệnh | Mô tả |
