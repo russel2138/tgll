@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.18"
+VERSION = "2026.10.24.19"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
@@ -430,6 +430,7 @@ def handle(line):
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
             say("  game-select moddp250|tgll   Switch game (stop first)")
+            say("  resolution 800x600 | 960x720   Resize game window (then restart)")
             say("  setup game      Unpack uploaded selected game archive")
             say("  vnc-password    Set new VNC password")
             say("  vnc-public on|off [port]   Remote access settings")
@@ -462,6 +463,41 @@ def handle(line):
             finally:
                 temp.unlink(missing_ok=True)
             say(f"Selected {PROFILES[choice]['name']}; run 'setup game' if needed, then 'start'")
+    elif cmd == "resolution":
+        from scripts.game_profiles import selected_key
+        game_key = selected_key()
+        cfg_path = RUNTIME / "game-resolutions.json"
+        defaults = {"moddp250": [800, 600], "tgll": [640, 480]}
+        try:
+            config = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.is_file() else {}
+        except (OSError, ValueError):
+            say("Invalid saved resolutions; refusing to overwrite")
+            return
+        if not arg.strip():
+            size = config.get(game_key, defaults[game_key])
+            say(f"Resolution for {game_key}: {size[0]}x{size[1]}")
+            say("Usage: resolution 800x600 | resolution 960x720, then restart")
+        else:
+            parts = arg.lower().replace("x", " ").split()
+            try:
+                if len(parts) != 2:
+                    raise ValueError()
+                width, height = (int(part) for part in parts)
+                if not 320 <= width <= 960 or not 240 <= height <= 720:
+                    raise ValueError()
+            except ValueError:
+                say("Usage: resolution WIDTHxHEIGHT (320..960 x 240..720)")
+                return
+            config[game_key] = [width, height]
+            RUNTIME.mkdir(parents=True, exist_ok=True)
+            temp = cfg_path.with_suffix(".tmp")
+            try:
+                temp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+                temp.chmod(0o600)
+                temp.replace(cfg_path)
+            finally:
+                temp.unlink(missing_ok=True)
+            say(f"Saved {game_key} resolution {width}x{height}; run restart to apply")
     elif cmd == "setup":
         action = arg.strip().lower()
         jobs = {
