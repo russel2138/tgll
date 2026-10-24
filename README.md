@@ -45,6 +45,8 @@ Không cần thay đổi Startup Command mặc định. Repo public nên không 
 | `bash ls -la` | Chạy một lệnh Bash |
 | `bash` | Vào chế độ Bash theo từng lệnh, gõ `exit` để quay lại |
 | `install-box64` | Biên dịch Box64 không cần root |
+| `install-wine` | Tải Wine x64 WOW64 đã kiểm tra SHA256 vào `.tgll-runtime/wine` không cần root |
+| `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
 | `job` | Kiểm tra tác vụ cài đặt |
 | `logs 50` | Xem 50 dòng cuối log |
 | `job-stop` | Gửi SIGTERM cho nhóm tiến trình cài đặt |
@@ -60,11 +62,19 @@ Dùng File Manager tạo file `/home/container/.tgll-command` có nội dung `up
 
 Nhập `install-box64` sau khi đã đồng bộ phiên bản code mới. Script tải Box64 từ [upstream](https://github.com/ptitSeb/box64), tự cài CMake và Ninja trong `.tgll-runtime/build-tools` nếu cần, build tối đa hai tác vụ đồng thời và sao chép binary vào `.tgll-runtime/box64/bin/box64` mà không chạy `cmake --install` ghi vào `/usr/lib`. Nếu đã biên dịch thành công từ lần trước, script tái sử dụng binary và không build lại. Theo dõi `job` và `logs 50`
 
-**Chưa có Wine64, Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 chưa có nghĩa chạy được game Windows x86-64 trên Linux ARM64
+## Wine64 (bước thử nghiệm sau Box64)
+
+Sau khi `install-box64` đã thành công, chạy `update`, rồi `install-wine`. Installer tải bản Wine 11.19 amd64 WOW64 từ [Kron4ek/Wine-Builds](https://github.com/Kron4ek/Wine-Builds/releases/tag/11.19), kiểm tra SHA256 chính thức, giải nén vào `.tgll-runtime/wine` và thử `box64 wine --version`
+
+Chọn 11.19 thay vì 11.20 vì release 11.20 có cảnh báo về lỗi segmentation fault khi khởi động trên một số hệ thống
+
+Theo dõi `job` và `logs 50`. Nếu installer báo thiếu thư viện gốc của Wine, log cần được kiểm tra trước khi thử thêm Xvfb. Wine được lưu trên ổ đĩa người dùng và có thể chiếm dung lượng đáng kể, không yêu cầu root
+
+**Chưa có Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 và Wine version không đồng nghĩa game Unity hoạt động trên ARM64
 
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
