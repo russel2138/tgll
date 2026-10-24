@@ -17,12 +17,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.5"
+VERSION = "2026.10.24.6"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -95,6 +95,8 @@ def status():
     say(f"Box64: {box64 if box64.is_file() else 'not installed'}")
     wine = RUNTIME / "wine" / "bin" / "wine"
     say(f"Wine64: {wine if wine.is_file() else 'not installed'}")
+    compat_lib = RUNTIME / "x86_64-libs" / "libgcc_s.so.1"
+    say(f"amd64 libgcc: {compat_lib if compat_lib.is_file() else 'not installed'}")
     job = job_info()
     if job:
         say(f"Job: {job.get('name')} PID {job.get('pid')} {'running' if job['running'] else 'stopped'}")
@@ -298,8 +300,15 @@ def handle(line):
         if not box64.is_file() or not wine.is_file():
             say("Box64 or Wine not installed. Run install-box64 and install-wine first")
         else:
+            env = os.environ.copy()
+            libs = RUNTIME / "x86_64-libs"
+            if libs.is_dir():
+                env["BOX64_LD_LIBRARY_PATH"] = str(libs) + (
+                    os.pathsep + env["BOX64_LD_LIBRARY_PATH"]
+                    if env.get("BOX64_LD_LIBRARY_PATH") else ""
+                )
             result = subprocess.run([str(box64), str(wine), "--version"],
-                                    check=False, timeout=60)
+                                    env=env, check=False, timeout=60)
             say(f"[wine-version] exit code: {result.returncode}")
     elif cmd == "job":
         job = job_info()
