@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.3"
+VERSION = "2026.10.24.4"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
@@ -116,12 +116,30 @@ def tail(path, count=40):
 
 
 def download(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "tgll-launcher/1.0"})
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "tgll-launcher/1.0",
+        "Accept": "application/vnd.github+json" if "api.github.com/" in url else "*/*",
+        "Cache-Control": "no-cache",
+    })
     with urllib.request.urlopen(request, timeout=35) as response:
         content = response.read(2 * 1024 * 1024 + 1)
     if len(content) > 2 * 1024 * 1024:
         raise ValueError("Remote file exceeds 2 MiB")
     return content
+
+
+def latest_commit_sha():
+    # Never fetch mutable /main/ raw files: CDN caches can make 'update'
+    # silently report 'Already up to date' after a new GitHub commit.
+    url = (
+        "https://api.github.com/repos/russel2138/tgll/commits/main"
+        f"?cache_bust={time.time_ns()}"
+    )
+    response = json.loads(download(url))
+    sha = response.get("sha", "")
+    if len(sha) != 40 or any(ch not in "0123456789abcdef" for ch in sha):
+        raise ValueError("GitHub API did not return a valid commit SHA")
+    return sha
 
 
 def update():
@@ -135,6 +153,8 @@ def update():
         restart()
         return
 
+    sha = latest_commit_sha()
+    say(f"Latest GitHub commit: {sha[:12]}")
     with tempfile.TemporaryDirectory(prefix=".tgll-update-", dir=ROOT) as tmp:
         staging = Path(tmp)
         changed = []
@@ -142,7 +162,9 @@ def update():
             path = PurePosixPath(relative)
             if path.is_absolute() or ".." in path.parts:
                 raise ValueError("Unsafe update path")
-            payload = download(RAW_BASE + relative)
+            # A commit SHA is immutable and every downloaded file uses the
+            # same exact revision, regardless of Github Raw caching.
+            payload = download(f"https://raw.githubusercontent.com/russel2138/tgll/{sha}/{relative}")
             if relative.endswith(".py"):
                 compile(payload, relative, "exec")
             dest = ROOT / relative
@@ -153,7 +175,7 @@ def update():
             if not dest.exists() or dest.read_bytes() != payload:
                 changed.append(relative)
         if not changed:
-            say("Already up to date")
+            say(f"Already up to date at commit {sha[:12]}")
             return
         for relative in changed:
             source = staging / relative
