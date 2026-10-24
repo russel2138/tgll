@@ -85,6 +85,12 @@ Theo dõi `job` và `logs 50`. Nếu installer báo không nạp được `ntdll
 
 **Chưa có Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 và Wine version không đồng nghĩa game Unity hoạt động trên ARM64
 
+### Sửa lỗi thiếu module khi cài Wine
+
+Nếu gặp `ModuleNotFoundError: No module named 'install_x86_libs'`, nguyên nhân là launcher cũ chỉ đồng bộ các file được khai báo trong phiên bản cũ. Bản launcher v2026.10.24.7 sử dụng danh sách file từ phiên bản mới trên GitHub, bảo đảm kéo cả dependency mới trong một lượt cập nhật. Đồng thời `install_wine.py` đã được viết tự chứa phần xử lý `libgcc_s.so.1` nên không yêu cầu import `install_x86_libs`
+
+Cách khôi phục: nhập `update`, kiểm tra dòng `TGLL launcher 2026.10.24.7`, chạy `install-wine` rồi `logs 100`. Wine và Box64 đã có không bị xóa hay cài lại
+
 ### Sửa lỗi Wine không nạp được ntdll.so
 
 Nếu log Box64 có `Error loading needed lib libgcc_s.so.1`, nguyên nhân là chưa có bản **amd64** của thư viện này trong đường dẫn Box64. Bản v2026.10.24.6 tự tải đúng gói Debian bookworm amd64 `libgcc-s1` (SHA256 cố định từ packages.debian.org), tách riêng `libgcc_s.so.1` vào `.tgll-runtime/x86_64-libs`, và đặt `BOX64_LD_LIBRARY_PATH` khi khởi động Wine
