@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.13"
+VERSION = "2026.10.24.14"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -100,6 +100,8 @@ def status():
     say(f"amd64 libgcc: {compat_lib if compat_lib.is_file() else 'not installed'}")
     display = RUNTIME / "display" / "usr" / "bin" / "Xvfb"
     say(f"Xvfb local: {display if display.is_file() else 'not installed'}")
+    vnc = RUNTIME / "vnc/native/usr/bin/x11vnc"
+    say(f"x11vnc: {vnc if vnc.is_file() else 'not installed'}")
     job = job_info()
     if job:
         say(f"Job: {job.get('name')} PID {job.get('pid')} {'running' if job['running'] else 'stopped'}")
@@ -266,6 +268,105 @@ def launch_job(name, script, args=()):
         say(f"Could not start {name}: {error}")
 
 
+def private_memory_stats():
+    """Show meaningful memory pressure instead of treating page cache as anon RSS."""
+    values = {}
+    try:
+        for line in (Path("/sys/fs/cgroup/memory.stat")).read_text().splitlines():
+            key, value = line.split()
+            values[key] = int(value)
+    except (OSError, ValueError):
+        pass
+    current = memory_value("memory.current")
+    maximum = memory_value("memory.max")
+    try:
+        used = int(current)
+        limit = int(maximum)
+        anon = values.get("anon", 0)
+        cache = values.get("file", 0)
+        inactive = values.get("inactive_file", 0)
+        mib = lambda size: f"{size / (1024 * 1024):.1f} MiB"
+        say(f"memory.current={mib(used)} / memory.max={mib(limit)}")
+        say(f"anon={mib(anon)} | file cache={mib(cache)} | inactive_file={mib(inactive)}")
+        say(f"estimated working set (current - inactive_file)={mib(max(0, used-inactive))}")
+        say(f"headroom before cgroup limit={mib(max(0, limit-used))}; cache may be reclaimed")
+    except (ValueError, TypeError):
+        say("Cgroup memory stats not available")
+    for key in ("memory.swap.current", "memory.events"):
+        try:
+            say(f"{key}: " + Path("/sys/fs/cgroup", key).read_text().strip().replace("\n", " | "))
+        except OSError:
+            pass
+
+
+def vnc_options(line):
+    settings = RUNTIME / "vnc-settings.json"
+    config = {}
+    if settings.is_file():
+        try:
+            config = json.loads(settings.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            say("Invalid VNC settings; refusing to overwrite them")
+            return
+    parts = line.split()
+    if not parts:
+        say("VNC public: " + ("on" if config.get("public") else "off (localhost only)"))
+        say("VNC port: " + str(config.get("port", "auto (VNC_PORT/SERVER_PORT/PORT/5900)")))
+        say("Usage: vnc-public on [allocated_tcp_port] | vnc-public off")
+        return
+    if parts[0] not in ("on", "off") or len(parts) > 2:
+        say("Usage: vnc-public on [allocated_tcp_port] | vnc-public off")
+        return
+    if len(parts) > 1:
+        try:
+            port = int(parts[1])
+            if not 1024 <= port <= 65535:
+                raise ValueError()
+        except ValueError:
+            say("VNC TCP port must be between 1024 and 65535")
+            return
+        config["port"] = port
+    config["public"] = parts[0] == "on"
+    RUNTIME.mkdir(parents=True, exist_ok=True)
+    tmp = settings.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        tmp.chmod(0o600)
+        tmp.replace(settings)
+    finally:
+        tmp.unlink(missing_ok=True)
+    say(f"VNC bind mode set to {'public (0.0.0.0)' if config['public'] else 'localhost only'}")
+    if config["public"]:
+        say("WARNING: classic VNC password auth does not encrypt the connection.")
+        say("Only use a hosting-panel allocated TCP port; prefer tunnel/private network.")
+    say("Mode takes effect the next time game-start or game-restart runs")
+
+
+def stop_live_game():
+    info = job_info()
+    if not info or not info["running"]:
+        say("Game session is not running")
+        return True
+    if info.get("name") != "game-live":
+        say(f"Cannot stop: other job '{info.get('name')}' is active")
+        return False
+    try:
+        # Signal supervisor only, allowing orderly Wine/VNC/Xvfb cleanup.
+        os.kill(int(info["pid"]), signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError as error:
+        say(f"Unable to stop game: {error}")
+        return False
+    for _ in range(55):
+        if not is_running(info["pid"]):
+            say("Game session stopped")
+            return True
+        time.sleep(0.25)
+    say("Stop timeout: inspect game-live.log and process status")
+    return False
+
+
 def stop_job():
     job = job_info()
     if not job or not job["running"]:
@@ -309,6 +410,8 @@ def handle(line):
     if cmd in ("help", "?"):
         say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
         say("          install-display | test-graphics | install-graphics-libs | game-install | test-game")
+        say("          install-vnc | vnc-password | vnc-public [on|off] [port]")
+        say("          game-start | game-stop | game-restart | game-status | game-screenshot | mem")
         say("          job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
@@ -335,6 +438,56 @@ def handle(line):
         launch_job("graphics-libs-setup", ROOT / "scripts" / "install_graphics_libs.py")
     elif cmd == "test-game":
         launch_job("game-test", ROOT / "scripts" / "test_game.py")
+    elif cmd == "install-vnc":
+        launch_job("vnc-setup", ROOT / "scripts" / "install_vnc.py")
+    elif cmd == "vnc-password":
+        installer = ROOT / "scripts" / "install_vnc.py"
+        if not installer.is_file():
+            say("VNC installer missing; run update first")
+        else:
+            result = subprocess.run(
+                [sys.executable, "-u", str(installer), "--password"],
+                cwd=ROOT, capture_output=True, text=True, timeout=30, check=False,
+            )
+            say(result.stdout.strip())
+            if result.stderr.strip():
+                say(result.stderr.strip()[-1200:])
+            if result.returncode:
+                say(f"VNC password generation failed (exit {result.returncode})")
+    elif cmd == "vnc-public":
+        vnc_options(arg)
+    elif cmd == "game-start":
+        launch_job("game-live", ROOT / "scripts" / "run_game.py")
+    elif cmd == "game-stop":
+        stop_live_game()
+    elif cmd == "game-restart":
+        if stop_live_game():
+            launch_job("game-live", ROOT / "scripts" / "run_game.py")
+    elif cmd == "mem":
+        private_memory_stats()
+    elif cmd == "game-status":
+        info = job_info()
+        say(f"Job: {json.dumps(info)}")
+        session = RUNTIME / "game-session.json"
+        if session.is_file():
+            say(session.read_text(encoding="utf-8"))
+        else:
+            say("No running TGLL VNC session recorded")
+        private_memory_stats()
+    elif cmd == "game-screenshot":
+        session = RUNTIME / "game-session.json"
+        if not session.is_file():
+            say("Game session is not active; run game-start")
+        else:
+            props = json.loads(session.read_text(encoding="utf-8"))
+            env = os.environ.copy()
+            env["DISPLAY"] = props["display"]
+            png = ROOT / "game-screen-live.png"
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "capture_game_screen.py"), str(png)],
+                cwd=ROOT, env=env, capture_output=True, text=True, timeout=15, check=False,
+            )
+            say(result.stdout.strip() or result.stderr.strip())
     elif cmd == "wine-version":
         box64 = RUNTIME / "box64" / "bin" / "box64"
         wine = RUNTIME / "wine" / "bin" / "wine"
