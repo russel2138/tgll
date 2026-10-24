@@ -64,33 +64,47 @@ def install():
     if not shutil.which("git"):
         raise RuntimeError("Git not found")
     RUNTIME.mkdir(parents=True, exist_ok=True)
-    cmake, ninja = install_build_tools()
+    built_binary = BUILD / "box64"
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(SITE) + os.pathsep + env.get("PYTHONPATH", "")
-    env["PATH"] = str(SITE / "bin") + os.pathsep + env.get("PATH", "")
 
-    SOURCE.parent.mkdir(parents=True, exist_ok=True)
-    if (SOURCE / ".git").is_dir():
-        log("Box64 source already exists, reusing it")
-    elif SOURCE.exists():
-        raise RuntimeError(f"Source directory exists but is not a git repo: {SOURCE}")
+    if built_binary.is_file():
+        log(f"Found previously compiled Box64: {built_binary}")
+        log("Skipping compilation; the previous attempt failed only at CMake install")
     else:
-        run(["git", "clone", "--depth", "1",
-             "https://github.com/ptitSeb/box64.git", str(SOURCE)])
-    BUILD.mkdir(parents=True, exist_ok=True)
-    run([
-        cmake, "-S", str(SOURCE), "-B", str(BUILD),
-        "-G", "Ninja",
-        "-DARM64=ON", "-DARM_DYNAREC=ON",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=" + str(PREFIX),
-        "-DNO_CONF_INSTALL=ON",
-    ], env=env)
-    run([cmake, "--build", str(BUILD), "--parallel", "2"], env=env)
-    run([cmake, "--install", str(BUILD)], env=env)
-    binary = PREFIX / "bin" / "box64"
-    if not binary.is_file():
-        raise RuntimeError(f"Expected Box64 binary not found: {binary}")
+        cmake, _ = install_build_tools()
+        env["PYTHONPATH"] = str(SITE) + os.pathsep + env.get("PYTHONPATH", "")
+        env["PATH"] = str(SITE / "bin") + os.pathsep + env.get("PATH", "")
+
+        SOURCE.parent.mkdir(parents=True, exist_ok=True)
+        if (SOURCE / ".git").is_dir():
+            log("Box64 source already exists, reusing it")
+        elif SOURCE.exists():
+            raise RuntimeError(f"Source directory exists but is not a git repo: {SOURCE}")
+        else:
+            run(["git", "clone", "--depth", "1",
+                 "https://github.com/ptitSeb/box64.git", str(SOURCE)])
+        BUILD.mkdir(parents=True, exist_ok=True)
+        run([
+            cmake, "-S", str(SOURCE), "-B", str(BUILD),
+            "-G", "Ninja",
+            "-DARM64=ON", "-DARM_DYNAREC=ON",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_INSTALL_PREFIX=" + str(PREFIX),
+            "-DNO_CONF_INSTALL=ON",
+        ], env=env)
+        run([cmake, "--build", str(BUILD), "--parallel", "2"], env=env)
+
+    if not built_binary.is_file():
+        raise RuntimeError(f"Compiled Box64 binary not found: {built_binary}")
+
+    # Do NOT run 'cmake --install': upstream also targets /usr/lib, which the
+    # unprivileged HidenCloud container cannot write. Box64 can be launched
+    # from its standalone binary without installing system-wide files.
+    destination = PREFIX / "bin"
+    destination.mkdir(parents=True, exist_ok=True)
+    binary = destination / "box64"
+    shutil.copy2(built_binary, binary)
+    binary.chmod(binary.stat().st_mode | 0o111)
     run([binary, "-v"], env=env)
     log(f"SUCCESS: Box64 installed at {binary}")
     log("Box64 alone cannot run TGLL.exe; Wine64 and display support are not installed.")
