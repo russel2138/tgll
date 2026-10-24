@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded TGLL launch smoke test (Box64 + Wine + ARM64 Xvfb/llvmpipe).
+"""Bounded selected-game launch smoke test (Box64 + Wine + ARM64 Xvfb/llvmpipe).
 
 Starts only the user's uploaded game. Does not automate logins or actions.
 Stops after 120 seconds at most, logs Wine/Unity and cgroup memory/CPU.
@@ -14,6 +14,7 @@ import sys
 import subprocess
 import time
 
+from game_profiles import current_game
 from install_graphics_libs import env_for_game_graphics
 
 from install_display import (
@@ -25,11 +26,12 @@ BOX64 = RUNTIME / "box64" / "bin" / "box64"
 WINE = RUNTIME / "wine" / "bin" / "wine"
 WINESERVER = RUNTIME / "wine" / "bin" / "wineserver"
 X64_LIBS = RUNTIME / "x86_64-libs"
-GAME = ROOT / "game"
-EXE = GAME / "TheGioiLangLa.exe"
-UNITY_LOG = RUNTIME / "game-Player.log"
-WINE_LOG = RUNTIME / "game-wine.log"
-WINEPREFIX = RUNTIME / "wineprefix-test"
+PROFILE = current_game()
+GAME = ROOT / PROFILE["directory"]
+EXE = GAME / PROFILE["exe"]
+UNITY_LOG = RUNTIME / f"game-test-{PROFILE['name']}-Player.log"
+WINE_LOG = RUNTIME / f"game-test-{PROFILE['name']}-wine.log"
+WINEPREFIX = RUNTIME / PROFILE["wineprefix"]
 MAX_TEST_SECONDS = 120
 CAPTURE_SCRIPT = ROOT / "scripts" / "capture_game_screen.py"
 
@@ -98,7 +100,7 @@ def validate_setup():
     if platform.machine().lower() not in ("aarch64", "arm64"):
         raise RuntimeError("The runtime is configured for ARM64 Linux")
     for file in (XVFB, BOX64, WINE, EXE, GAME / "UnityPlayer.dll",
-                 GAME / "GameAssembly.dll", GAME / "TheGioiLangLa_Data" / "boot.config"):
+                 GAME / "GameAssembly.dll", GAME / PROFILE["data"] / "boot.config"):
         if not file.is_file():
             raise RuntimeError(f"Missing required file: {file}")
     lib = X64_LIBS / "libgcc_s.so.1"
@@ -196,7 +198,7 @@ def main():
     wenv = make_wine_env(xenv, display)
     xvfb_log = RUNTIME / "game-xvfb.log"
 
-    say(f"TGLL smoke test: Box64 + Wine + Xvfb {display}")
+    say(f"{PROFILE['name']} smoke test: Box64 + Wine + Xvfb {display}")
     say(f"Game executable: {EXE}")
     say(f"Maximum run time: {MAX_TEST_SECONDS}s")
     say("No batchmode/nographics: Unity must initialize a real graphics device")
@@ -232,7 +234,7 @@ def main():
             "-screen-width", "640", "-screen-height", "480",
             "-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\"),
         ]
-        say("Starting TGLL Windows executable through Wine (no login automation)")
+        say(f"Starting {PROFILE['name']} Windows executable through Wine (no login automation)")
         with WINE_LOG.open("w", encoding="utf-8") as stream:
             wine = subprocess.Popen(
                 arguments, cwd=GAME, env=wenv, stdin=subprocess.DEVNULL,
