@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.22"
+VERSION = "2026.10.24.23"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
@@ -136,16 +136,45 @@ def download(url):
 
 
 def latest_commit_sha():
-    # Never fetch mutable /main/ raw files: CDN caches can make 'update'
-    # silently report 'Already up to date' after a new GitHub commit.
-    url = (
-        "https://api.github.com/repos/russel2138/tgll/commits/main"
-        f"?cache_bust={time.time_ns()}"
-    )
-    response = json.loads(download(url))
+    """Resolve an immutable commit without consuming GitHub REST API quota.
+
+    Shared-IP free hosting often receives HTTP 403 from unauthenticated
+    GitHub API calls. Git smart HTTP (git ls-remote) has a separate limit.
+    """
+    if shutil.which("git"):
+        try:
+            result = subprocess.run(
+                ["git", "-c", "credential.interactive=never", "ls-remote",
+                 "--exit-code", "https://github.com/russel2138/tgll.git",
+                 "refs/heads/main"],
+                cwd=ROOT, capture_output=True, text=True,
+                timeout=35, check=False,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) == 2 and parts[1] == "refs/heads/main":
+                        sha = parts[0]
+                        if len(sha) == 40 and all(c in "0123456789abcdef" for c in sha):
+                            say("Resolved latest commit via git ls-remote (no REST API quota)")
+                            return sha
+            say("git ls-remote unavailable, trying GitHub API once")
+        except (OSError, subprocess.TimeoutExpired) as error:
+            say(f"git ls-remote unavailable ({type(error).__name__}), trying GitHub API")
+    url = "https://api.github.com/repos/russel2138/tgll/commits/main"
+    try:
+        response = json.loads(download(url))
+    except urllib.error.HTTPError as error:
+        if error.code in (403, 429):
+            raise RuntimeError(
+                "GitHub REST API rate limit reached on shared hosting IP; "
+                "git ls-remote also unavailable. Do not retry repeatedly."
+            ) from error
+        raise
     sha = response.get("sha", "")
     if len(sha) != 40 or any(ch not in "0123456789abcdef" for ch in sha):
-        raise ValueError("GitHub API did not return a valid commit SHA")
+        raise ValueError("GitHub did not return a valid commit SHA")
     return sha
 
 
