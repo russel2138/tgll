@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.1"
+VERSION = "2026.10.24.2"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
@@ -36,10 +36,21 @@ def say(message=""):
 
 
 def is_running(pid):
+    """Do not treat an exited but unreaped Linux zombie as a live job."""
     try:
-        os.kill(int(pid), 0)
+        pid = int(pid)
+        if pid <= 0:
+            return False
+        stat_path = Path(f"/proc/{pid}/stat")
+        if stat_path.is_file():
+            stat = stat_path.read_text(encoding="ascii", errors="replace")
+            # /proc/<pid>/stat: pid (comm) state ...
+            state = stat.rsplit(")", 1)[-1].strip().split()[0]
+            if state in ("Z", "X"):
+                return False
+        os.kill(pid, 0)
         return True
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, IndexError):
         return False
 
 
