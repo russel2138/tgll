@@ -31,6 +31,14 @@ PACKAGES = (
     "libvncclient1",
     "libavahi-client3",
     "libavahi-common3",
+    # x11vnc/LibVNCServer runtime dependencies absent in minimal HidenCloud.
+    # Map the exact missing ARM64 SONAMEs from the real container log:
+    # libXtst.so.6 -> libxtst6
+    # libXdamage.so.1 -> libxdamage1
+    # liblzo2.so.2 -> liblzo2-2
+    "libxtst6",
+    "libxdamage1",
+    "liblzo2-2",
 )
 MAX_INDEX_COMPRESSED = 25 * 1024 * 1024
 MAX_INDEX_UNPACKED = 130 * 1024 * 1024
@@ -42,7 +50,7 @@ def say(text):
 
 
 def index_packages():
-    say("Reading Debian Bookworm ARM64 package index for minimal x11vnc...")
+    say("Reading Debian Bookworm ARM64 package index for x11vnc and dependencies...")
     req = urllib.request.Request(INDEX_URL, headers={
         "User-Agent": "TGLL-VNC/1.0", "Accept-Encoding": "identity",
     })
