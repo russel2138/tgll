@@ -85,9 +85,17 @@ Theo dõi `job` và `logs 50`. Nếu installer báo không nạp được `ntdll
 
 **Chưa có Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 và Wine version không đồng nghĩa game Unity hoạt động trên ARM64
 
+### Sửa lỗi Wine không nạp được ntdll.so
+
+Nếu log Box64 có `Error loading needed lib libgcc_s.so.1`, nguyên nhân là chưa có bản **amd64** của thư viện này trong đường dẫn Box64. Bản v2026.10.24.6 tự tải đúng gói Debian bookworm amd64 `libgcc-s1` (SHA256 cố định từ packages.debian.org), tách riêng `libgcc_s.so.1` vào `.tgll-runtime/x86_64-libs`, và đặt `BOX64_LD_LIBRARY_PATH` khi khởi động Wine
+
+**Để áp dụng:** chạy `update` rồi `install-wine`, tiếp theo `logs 100`. Wine đã giải nén được tận dụng lại, không tải lại 75 MiB. Không cần sudo, apt install hay thay đổi thư viện ARM64 của hệ thống
+
+Nên thấy `Installed amd64 libgcc_s.so.1 without root` và bước `Testing ... wine --version`. Nếu chuyển sang lỗi thư viện khác, xem `wine-diagnose` trước khi cài thêm phụ thuộc. Khi `wine-version` chạy thành công, vẫn cần Xvfb và software rendering trước khi thử game
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
