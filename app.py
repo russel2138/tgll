@@ -411,7 +411,8 @@ def handle(line):
         say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
         say("          install-display | test-graphics | install-graphics-libs | game-install | test-game")
         say("          install-vnc | vnc-password | vnc-public [on|off] [port]")
-        say("          game-start | game-stop | game-restart | game-status | game-screenshot | mem")
+        say("          game-start | game-stop | game-restart | game-autostart on|off")
+        say("          game-status | game-screenshot | mem")
         say("          job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
@@ -456,6 +457,30 @@ def handle(line):
                 say(f"VNC password generation failed (exit {result.returncode})")
     elif cmd == "vnc-public":
         vnc_options(arg)
+    elif cmd == "game-autostart":
+        enabled_file = RUNTIME / "game-autostart.json"
+        if arg not in ("on", "off"):
+            enabled = False
+            if enabled_file.is_file():
+                try:
+                    enabled = bool(json.loads(enabled_file.read_text()).get("enabled"))
+                except (ValueError, OSError):
+                    pass
+            say("Game autostart: " + ("on" if enabled else "off"))
+            say("Usage: game-autostart on | game-autostart off")
+        else:
+            RUNTIME.mkdir(parents=True, exist_ok=True)
+            temp = enabled_file.with_suffix(".tmp")
+            try:
+                temp.write_text(json.dumps({"enabled": arg == "on"}), encoding="utf-8")
+                temp.chmod(0o600)
+                temp.replace(enabled_file)
+            finally:
+                temp.unlink(missing_ok=True)
+            say("Game autostart set to " + arg)
+            if arg == "on":
+                say("Game starts automatically after next HidenCloud/launcher restart; "
+                    "use game-start to launch immediately")
     elif cmd == "game-start":
         launch_job("game-live", ROOT / "scripts" / "run_game.py")
     elif cmd == "game-stop":
@@ -547,6 +572,14 @@ def main():
     say("Type 'help' in HidenCloud Console. Process remains online while idle.")
     say(f"Fallback: create {COMMAND_FILE.name} in File Manager with a command")
     threading.Thread(target=stdin_reader, daemon=True).start()
+    auto = RUNTIME / "game-autostart.json"
+    if auto.is_file():
+        try:
+            if bool(json.loads(auto.read_text(encoding="utf-8")).get("enabled")):
+                say("Autostart enabled: launching TGLL VPS session")
+                launch_job("game-live", ROOT / "scripts" / "run_game.py")
+        except (OSError, ValueError) as error:
+            say(f"Game autostart config error: {error}")
     while not STOPPING:
         try:
             if COMMAND_FILE.is_file():
