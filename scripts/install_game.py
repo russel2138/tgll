@@ -51,7 +51,7 @@ def validate_archive(archive):
             or ".." in path.parts or "\\" in info.filename
             or ":" in info.filename or not path.parts):
             raise ValueError("Unsafe ZIP entry: " + info.filename)
-        if (info.external_attr >> 16) & stat.S_IFMT == stat.S_IFLNK:
+        if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
             raise ValueError("ZIP symbolic link not allowed: " + info.filename)
         if not info.is_dir():
             total += info.file_size
