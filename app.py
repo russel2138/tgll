@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.11"
+VERSION = "2026.10.24.12"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/test_game.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -308,7 +308,8 @@ def handle(line):
     cmd = cmd.lower()
     if cmd in ("help", "?"):
         say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
-        say("          install-display | test-graphics | game-install | test-game | job | logs [N]")
+        say("          install-display | test-graphics | install-graphics-libs | game-install | test-game")
+        say("          job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
         say("Tip: .tgll-command file also works if panel console input is unavailable.")
@@ -330,6 +331,8 @@ def handle(line):
         launch_job("graphics-test", ROOT / "scripts" / "test_graphics.py")
     elif cmd == "game-install":
         launch_job("game-install", ROOT / "scripts" / "install_game.py")
+    elif cmd == "install-graphics-libs":
+        launch_job("graphics-libs-setup", ROOT / "scripts" / "install_graphics_libs.py")
     elif cmd == "test-game":
         launch_job("game-test", ROOT / "scripts" / "test_game.py")
     elif cmd == "wine-version":
