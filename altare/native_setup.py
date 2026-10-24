@@ -59,6 +59,12 @@ PACKAGES = (
     "libffi8", "libexpat1", "libedit2", "libxml2", "liblzma5",
     "libgcrypt20", "libgpg-error0", "libsystemd0", "liblz4-1",
     "libselinux1", "libpcre2-8-0",
+    "libjpeg62-turbo", "libpng16-16", "libgnutls30",
+    "libnettle8", "libhogweed6", "libp11-kit0", "libtasn1-6",
+    "libidn2-0", "libunistring2", "libgmp10",
+    "libtinfo6", "libxrender1", "libxcomposite1", "libxcursor1",
+    "libfreetype6", "libfontconfig1", "libbrotli1", "libuuid1",
+    "libglvnd0", "libaudit1", "libcap-ng0", "zlib1g",
 )
 
 def log(message):
@@ -284,7 +290,8 @@ def set_password():
         tmp.replace(PASSWD)
     finally:
         tmp.unlink(missing_ok=True)
-    DISPLAY_PASSWORD.write_text(password + "\n", encoding="utf-8")
+    with os.fdopen(os.open(str(DISPLAY_PASSWORD), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as stream:
+        stream.write(password + "\n")
     DISPLAY_PASSWORD.chmod(0o600)
     log("VNC password: " + password)
     log("VNC traffic is NOT encrypted; keep the password private")
