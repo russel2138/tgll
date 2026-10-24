@@ -2,6 +2,7 @@
 """HidenCloud TGLL launcher. Python 3.10+, no third-party runtime deps."""
 from __future__ import annotations
 
+import ast
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -17,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.6"
+VERSION = "2026.10.24.7"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
@@ -144,6 +145,29 @@ def latest_commit_sha():
     return sha
 
 
+def managed_files_in_remote_app(app_payload):
+    """Discover files from the NEW launcher, not the currently running one.
+
+    This prevents missing new dependencies when the current release did not
+    know about them (as happened with scripts/install_x86_libs.py).
+    """
+    tree = ast.parse(app_payload.decode("utf-8"), filename="app.py")
+    for statement in tree.body:
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "MANAGED_FILES"
+            for target in statement.targets
+        ):
+            files = ast.literal_eval(statement.value)
+            if not isinstance(files, (list, tuple)) or not 1 <= len(files) <= 64:
+                raise ValueError("Invalid MANAGED_FILES in remote app")
+            if not all(isinstance(path, str) for path in files):
+                raise ValueError("MANAGED_FILES must contain strings")
+            if "app.py" not in files or len(set(files)) != len(files):
+                raise ValueError("MANAGED_FILES missing app.py or has duplicates")
+            return files
+    raise ValueError("Remote app.py does not declare MANAGED_FILES")
+
+
 def update():
     say("Checking GitHub updates...")
     if (ROOT / ".git").exists():
@@ -157,16 +181,20 @@ def update():
 
     sha = latest_commit_sha()
     say(f"Latest GitHub commit: {sha[:12]}")
+    remote_url = f"https://raw.githubusercontent.com/russel2138/tgll/{sha}/"
+    app_payload = download(remote_url + "app.py")
+    remote_files = managed_files_in_remote_app(app_payload)
+    say(f"Syncing {len(remote_files)} managed files from remote manifest")
     with tempfile.TemporaryDirectory(prefix=".tgll-update-", dir=ROOT) as tmp:
         staging = Path(tmp)
         changed = []
-        for relative in MANAGED_FILES:
+        for relative in remote_files:
             path = PurePosixPath(relative)
-            if path.is_absolute() or ".." in path.parts:
+            if not relative or path.is_absolute() or ".." in path.parts:
                 raise ValueError("Unsafe update path")
-            # A commit SHA is immutable and every downloaded file uses the
-            # same exact revision, regardless of Github Raw caching.
-            payload = download(f"https://raw.githubusercontent.com/russel2138/tgll/{sha}/{relative}")
+            # All files use the same immutable Git commit; use the remote
+            # manifest to include any dependencies added by this release.
+            payload = app_payload if relative == "app.py" else download(remote_url + relative)
             if relative.endswith(".py"):
                 compile(payload, relative, "exec")
             dest = ROOT / relative
