@@ -59,6 +59,7 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `install-box64` | Biên dịch Box64 không cần root |
 | `install-wine` | Tải Wine x64 WOW64 đã kiểm tra SHA256 vào `.tgll-runtime/wine` không cần root |
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
+| `wine-diagnose` | Kiểm tra Wine và xuất nguyên nhân lỗi `ntdll.so` qua `BOX64_LOG=2` |
 | `job` | Kiểm tra tác vụ cài đặt |
 | `logs 50` | Xem 50 dòng cuối log |
 | `job-stop` | Gửi SIGTERM cho nhóm tiến trình cài đặt |
@@ -80,7 +81,7 @@ Sau khi `install-box64` đã thành công, chạy `update`, rồi `install-wine`
 
 Chọn 11.19 thay vì 11.20 vì release 11.20 có cảnh báo về lỗi segmentation fault khi khởi động trên một số hệ thống
 
-Theo dõi `job` và `logs 50`. Nếu installer báo thiếu thư viện gốc của Wine, log cần được kiểm tra trước khi thử thêm Xvfb. Wine được lưu trên ổ đĩa người dùng và có thể chiếm dung lượng đáng kể, không yêu cầu root
+Theo dõi `job` và `logs 50`. Nếu installer báo không nạp được `ntdll.so`, chạy `wine-diagnose` rồi `logs 100` để tìm `Error loading needed lib`, `Symbol ... not found` hoặc lỗi khác. Log chi tiết được giữ tại `.tgll-runtime/wine-debug.log`. Không xóa hoặc tải lại Wine khi đang chẩn đoán. Wine được lưu trên ổ đĩa người dùng và có thể chiếm dung lượng đáng kể, không yêu cầu root
 
 **Chưa có Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 và Wine version không đồng nghĩa game Unity hoạt động trên ARM64
 
