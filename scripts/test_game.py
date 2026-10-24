@@ -187,6 +187,9 @@ def capture_game_screen(env, mark):
 
 
 def main():
+    # Smoke tests must not bypass the same 1-CPU limit as normal game sessions.
+    from run_game import limit_cpu_one_core
+    limit_cpu_one_core()
     validate_setup()
     RUNTIME.mkdir(parents=True, exist_ok=True)
     ensure_local_socket_dir()
