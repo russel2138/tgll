@@ -206,9 +206,30 @@ logs 150
 
 Phiên bản thử game từ **2026.10.24.12** ghi log Wine `err+all`, các tiến trình Wine/Unity (kèm trạng thái chờ), và dùng đường dẫn `Z:\\home\\container\\.tgll-runtime\\game-Player.log` cho Unity. Vì thế nếu game vẫn đứng, có thêm bằng chứng để phân biệt thiếu DLL, chờ wineserver hay lỗi driver. Không tự giả định lỗi Xinerama/EGL là nguyên nhân duy nhất
 
+### Chụp màn hình TGLL không cần VNC
+
+Nếu `Player.log` đã có `Main:Start()`, `Main:LateUpdate()` nhưng chưa xác nhận giao diện game, dùng bản launcher **2026.10.24.13**:
+
+```text
+update
+test-game
+logs 150
+```
+
+Bài test vẫn tối đa 120 giây, không đăng nhập tự động, nhưng sẽ chụp màn hình tại khoảng giây 25 và 75. File PNG lưu **trực tiếp trong File Manager**:
+
+```text
+/home/container/game-screen-25s.png
+/home/container/game-screen-75s.png
+```
+
+Bạn có thể tải hoặc mở hai file này trong panel để xem game đã hiển thị đúng hay đang bị màn hình đen/treo. Nếu có thông tin đăng nhập trên màn hình, không chia sẻ công khai ảnh. Screenshot dùng `libX11.so.6` và Python stdlib, không cần Pillow, VNC hay cài thêm package. Không mở port mạng và không giữ background service
+
+Ảnh chỉ xác nhận nội dung màn hình ảo tại thời điểm chụp, không đảm bảo game nhận thao tác hoặc kết nối máy chủ. Với mức RAM gần chạm cgroup cap 3.3 GiB, ưu tiên kiểm tra hình ảnh trước khi dựng VNC thường trực
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/install_graphics_libs.py`, `scripts/test_game.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/install_graphics_libs.py`, `scripts/test_game.py`, `scripts/capture_game_screen.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
