@@ -2,13 +2,11 @@
 """HidenCloud TGLL launcher. Python 3.10+, no third-party runtime deps."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import platform
 import queue
-import shlex
 import shutil
 import signal
 import subprocess
@@ -24,7 +22,7 @@ ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "scripts/install_box64.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -207,8 +205,8 @@ def stop_job():
         say("No active job")
         return
     try:
-        os.kill(int(job["pid"]), signal.SIGTERM)
-        say("Stop signal sent to job")
+        os.killpg(int(job["pid"]), signal.SIGTERM)
+        say("Stop signal sent to job process group")
     except OSError as error:
         say(f"Failed to stop job: {error}")
 
