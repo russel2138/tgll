@@ -25,6 +25,7 @@ VNC_DIR = RUNTIME / "vnc"
 PREFIX = VNC_DIR / "native"
 BIN = PREFIX / "usr" / "bin" / "x11vnc"
 PASSWORD_FILE = VNC_DIR / "passwd"
+DISPLAY_PASSWORD = VNC_DIR / "password-display.txt"
 PACKAGES = (
     "x11vnc",
     "libvncserver1",
@@ -156,7 +157,19 @@ def set_password():
         PASSWORD_FILE.chmod(0o600)
     finally:
         target.unlink(missing_ok=True)
-    say("VNC PASSWORD (displayed ONCE; keep private): " + password)
+    # User explicitly requested a repeatable vnc-info display. Keep the
+    # optional plain-text copy in this unshared container only, never GitHub.
+    # A separate 0600 file avoids passing the password in process arguments.
+    display_tmp = DISPLAY_PASSWORD.with_name("password-display.tmp")
+    try:
+        with os.fdopen(os.open(str(display_tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
+            stream.write(password + "\n")
+        display_tmp.chmod(0o600)
+        display_tmp.replace(DISPLAY_PASSWORD)
+    finally:
+        display_tmp.unlink(missing_ok=True)
+    say("VNC PASSWORD (keep private): " + password)
+    say("Run vnc-info anytime to view this password and connection info.")
     say(f"Password file: {PASSWORD_FILE} (mode 0600)")
     say("RFB legacy password authentication is NOT transport encryption.")
     say("Changing the password while VNC runs requires game-restart.")
