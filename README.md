@@ -296,6 +296,20 @@ Bản treo hiện giảm chi phí phụ trợ bằng cách tắt Wine/Box64 debu
 
 **Chưa xác nhận có thể treo 24/24 trong 3,3 GiB RAM**. VNC và việc đăng nhập có thể làm mức sử dụng tăng. Theo dõi `game-status`, `mem` và `memory.events`; nếu bộ nhớ anon/working set cao sát giới hạn hoặc xuất hiện OOM, nên nâng RAM lên ít nhất 4 GiB thay vì tùy tiện đổi driver đồ họa đã chạy thành công
 
+### Sửa lỗi x11vnc thiếu thư viện ARM64 (v2026.10.24.15)
+
+Nếu `install-vnc` báo thiếu `libXtst.so.6`, `libXdamage.so.1`, `liblzo2.so.2`, chạy:
+
+```text
+update
+install-vnc
+logs 100
+```
+
+Bản mới tự cài thêm các gói Debian Bookworm ARM64 `libxtst6`, `libxdamage1`, `liblzo2-2` với SHA256 theo Debian Packages.xz. Các gói x11vnc đã tải trước sẽ được giữ nguyên và bỏ qua bước giải nén nếu đã có marker SHA256. Sau khi `ldd` không còn thư viện thiếu, log báo `SUCCESS: Rootless x11vnc installed.`
+
+Tiếp theo chạy `vnc-password` để tạo mật khẩu trong Console rồi mới `game-start`. VNC mặc định chỉ bind localhost, nếu kết nối TigerVNC từ ngoài container cần bật `vnc-public on <PORT>` với cổng TCP được panel cấp. Không dùng port tự đoán và tránh VNC công khai khi không có lớp mã hóa/tunnel
+
 ## Dữ liệu và cập nhật
 
 - `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/install_graphics_libs.py`, `scripts/test_game.py`, `scripts/capture_game_screen.py`, `README.md` là các file launcher do lệnh update tự cập nhật
