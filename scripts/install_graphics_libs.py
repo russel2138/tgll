@@ -110,6 +110,28 @@ def env_for_game_graphics(base=None):
     return env
 
 
+def add_unversioned_aliases():
+    """Some Box64 wrappers dlopen libXinerama.so (without the .1 suffix).
+
+    Debian runtime .deb files usually ship only versioned SONAME symlinks.
+    Supply private aliases without modifying /usr/lib or any host paths.
+    """
+    for name, soname in (
+        ("libXinerama.so", "libXinerama.so.1"),
+        ("libXcomposite.so", "libXcomposite.so.1"),
+        ("libxkbregistry.so", "libxkbregistry.so.0"),
+        ("libEGL.so", "libEGL.so.1"),
+    ):
+        source = LIBDIR / soname
+        alias = LIBDIR / name
+        if not source.is_file():
+            raise RuntimeError(f"Missing extracted library: {source}")
+        if alias.is_symlink() or alias.exists():
+            continue
+        alias.symlink_to(soname)
+        log(f"Created private Box64 wrapper alias: {name} -> {soname}")
+
+
 def inspect_elf_dependencies(env):
     if not LIBDIR.is_dir():
         raise RuntimeError("Graphics native library directory missing")
@@ -173,6 +195,7 @@ def main():
                        check=True, timeout=90)
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(digest, encoding="ascii")
+    add_unversioned_aliases()
     inspect_elf_dependencies(env_for_game_graphics())
 
 
