@@ -17,12 +17,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.2"
+VERSION = "2026.10.24.3"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -93,6 +93,8 @@ def status():
         say(f"{name}: {shutil.which(name) or 'missing'}")
     box64 = RUNTIME / "box64" / "bin" / "box64"
     say(f"Box64: {box64 if box64.is_file() else 'not installed'}")
+    wine = RUNTIME / "wine" / "bin" / "wine"
+    say(f"Wine64: {wine if wine.is_file() else 'not installed'}")
     job = job_info()
     if job:
         say(f"Job: {job.get('name')} PID {job.get('pid')} {'running' if job['running'] else 'stopped'}")
@@ -251,7 +253,8 @@ def handle(line):
     cmd, _, arg = line.partition(" ")
     cmd = cmd.lower()
     if cmd in ("help", "?"):
-        say("Commands: help | status | update | restart | install-box64 | job | logs [N]")
+        say("Commands: help | status | update | restart | install-box64 | install-wine | wine-version")
+        say("          job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
         say("Tip: .tgll-command file also works if panel console input is unavailable.")
@@ -263,6 +266,17 @@ def handle(line):
         restart()
     elif cmd == "install-box64":
         launch_job("box64-setup", ROOT / "scripts" / "install_box64.py")
+    elif cmd == "install-wine":
+        launch_job("wine-setup", ROOT / "scripts" / "install_wine.py")
+    elif cmd == "wine-version":
+        box64 = RUNTIME / "box64" / "bin" / "box64"
+        wine = RUNTIME / "wine" / "bin" / "wine"
+        if not box64.is_file() or not wine.is_file():
+            say("Box64 or Wine not installed. Run install-box64 and install-wine first")
+        else:
+            result = subprocess.run([str(box64), str(wine), "--version"],
+                                    check=False, timeout=60)
+            say(f"[wine-version] exit code: {result.returncode}")
     elif cmd == "job":
         job = job_info()
         say(json.dumps(job, indent=2) if job else "No job recorded")
