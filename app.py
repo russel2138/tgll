@@ -18,11 +18,11 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.17"
+VERSION = "2026.10.24.18"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -423,12 +423,14 @@ def handle(line):
             say("  game-screenshot | bash [command] | bash | quit")
             say("  Tip: launcher stays online after stopping the game.")
         else:
-            say("TGLL VPS Commands:")
-            say("  start           Start game + VNC")
+            say("TGLL / ModDP250 VPS Commands:")
+            say("  start           Start selected game + VNC")
             say("  stop            Stop game + Wine + VNC (launcher stays online)")
             say("  restart         Restart game + VNC")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
+            say("  game-select moddp250|tgll   Switch game (stop first)")
+            say("  setup game      Unpack uploaded selected game archive")
             say("  vnc-password    Set new VNC password")
             say("  vnc-public on|off [port]   Remote access settings")
             say("  mem | logs [N] | update | game-autostart on|off")
@@ -439,6 +441,27 @@ def handle(line):
         update()
     elif cmd == "launcher-restart":
         restart()
+    elif cmd == "game-select":
+        from scripts.game_profiles import selected_key, SELECTION_FILE, PROFILES
+        choice = arg.strip().lower()
+        if not choice:
+            current = selected_key()
+            say(f"Selected game: {current} ({PROFILES[current]['name']})")
+            say("Use: game-select moddp250 | game-select tgll")
+        elif choice not in PROFILES:
+            say("Use: game-select moddp250 | game-select tgll")
+        elif (job_info() or {}).get("running"):
+            say("Stop the active game/job before switching: stop or job-stop")
+        else:
+            RUNTIME.mkdir(parents=True, exist_ok=True)
+            temp = SELECTION_FILE.with_suffix(".tmp")
+            try:
+                temp.write_text(json.dumps({"game": choice}), encoding="utf-8")
+                temp.chmod(0o600)
+                temp.replace(SELECTION_FILE)
+            finally:
+                temp.unlink(missing_ok=True)
+            say(f"Selected {PROFILES[choice]['name']}; run 'setup game' if needed, then 'start'")
     elif cmd == "setup":
         action = arg.strip().lower()
         jobs = {
@@ -522,11 +545,13 @@ def handle(line):
     elif cmd == "game-status":
         info = job_info()
         say(f"Job: {json.dumps(info)}")
+        from scripts.game_profiles import selected_key
+        say(f"Selected game: {selected_key()}")
         session = RUNTIME / "game-session.json"
         if session.is_file():
             say(session.read_text(encoding="utf-8"))
         else:
-            say("No running TGLL VNC session recorded")
+            say("No running game VNC session recorded")
         private_memory_stats()
     elif cmd == "game-screenshot":
         session = RUNTIME / "game-session.json"
@@ -588,7 +613,7 @@ def main():
     if auto.is_file():
         try:
             if bool(json.loads(auto.read_text(encoding="utf-8")).get("enabled")):
-                say("Autostart enabled: launching TGLL VPS session")
+                say("Autostart enabled: launching selected game VPS session")
                 launch_job("game-live", ROOT / "scripts" / "run_game.py")
         except (OSError, ValueError) as error:
             say(f"Game autostart config error: {error}")
