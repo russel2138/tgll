@@ -18,11 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.21"
+VERSION = "2026.10.24.22"
 ROOT = Path(__file__).resolve().parent
+IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -433,6 +434,8 @@ def handle(line):
             say("  resolution 800x600 | 960x720   Set internal game resolution")
             say("  vnc-scale on|off   Fit full game into 640x480 VNC view")
             say("  setup game      Unpack uploaded selected game archive")
+            if IS_ALTARE_AMD64:
+                say("  setup native    Install Altare amd64 Wine + Xvfb + VNC (no Box64)")
             say("  vnc-password    Set new VNC password")
             say("  vnc-public on|off [port]   Remote access settings")
             say("  mem | logs [N] | update | game-autostart on|off")
@@ -538,19 +541,31 @@ def handle(line):
             "test-game": ("game-test", "test_game.py", ()),
             "test-graphics": ("graphics-test", "test_graphics.py", ()),
             "wine-diagnose": ("wine-diagnose", "install_wine.py", ("--diagnose",)),
+            "native": ("altare-native-setup", "native_setup.py", ()),
         }
         if action not in jobs:
             say("Usage: setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
         else:
-            name, filename, options = jobs[action]
-            launch_job(name, ROOT / "scripts" / filename, options)
+            if action == "native":
+                if not IS_ALTARE_AMD64:
+                    say("setup native only supports Linux x86_64")
+                    return
+                launch_job("altare-native-setup", ROOT / "altare" / "native_setup.py")
+            else:
+                if IS_ALTARE_AMD64 and action in ("box64", "wine", "display", "graphics", "vnc", "test-graphics", "test-game", "wine-diagnose"):
+                    say("This setup target is ARM64-only. On Altare amd64 run: setup native")
+                    return
+                name, filename, options = jobs[action]
+                launch_job(name, ROOT / "scripts" / filename, options)
     elif cmd == "vnc-password":
-        installer = ROOT / "scripts" / "install_vnc.py"
+        installer = (ROOT / "altare" / "native_setup.py"
+                     if IS_ALTARE_AMD64 else ROOT / "scripts" / "install_vnc.py")
         if not installer.is_file():
             say("VNC installer missing; run update first")
         else:
             result = subprocess.run(
-                [sys.executable, "-u", str(installer), "--password"],
+                [sys.executable, "-u", str(installer),
+                 "password" if IS_ALTARE_AMD64 else "--password"],
                 cwd=ROOT, capture_output=True, text=True, timeout=30, check=False,
             )
             say(result.stdout.strip())
@@ -598,12 +613,16 @@ def handle(line):
                 say("Game starts automatically after next HidenCloud/launcher restart; "
                     "use game-start to launch immediately")
     elif cmd == "game-start":
-        launch_job("game-live", ROOT / "scripts" / "run_game.py")
+        launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
+                    else ROOT / "scripts" / "run_game.py")
+        launch_job("game-live", launcher)
     elif cmd == "game-stop":
         stop_live_game()
     elif cmd == "game-restart":
         if stop_live_game():
-            launch_job("game-live", ROOT / "scripts" / "run_game.py")
+            launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
+                        else ROOT / "scripts" / "run_game.py")
+            launch_job("game-live", launcher)
     elif cmd == "mem":
         private_memory_stats()
     elif cmd == "game-status":
@@ -671,14 +690,16 @@ def main():
     global STOPPING
     RUNTIME.mkdir(parents=True, exist_ok=True)
     say(f"TGLL launcher {VERSION} | {platform.machine()}")
-    say("Type 'help' in HidenCloud Console. Process remains online while idle.")
+    say("Type 'help' in hosting Console. Process remains online while idle.")
     threading.Thread(target=stdin_reader, daemon=True).start()
     auto = RUNTIME / "game-autostart.json"
     if auto.is_file():
         try:
             if bool(json.loads(auto.read_text(encoding="utf-8")).get("enabled")):
                 say("Autostart enabled: launching selected game VPS session")
-                launch_job("game-live", ROOT / "scripts" / "run_game.py")
+                launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
+                            else ROOT / "scripts" / "run_game.py")
+                launch_job("game-live", launcher)
         except (OSError, ValueError) as error:
             say(f"Game autostart config error: {error}")
     while not STOPPING:
