@@ -4,10 +4,10 @@ Launcher cho container Python trên HidenCloud (Linux ARM64), không cần quy�
 
 ## Thiết lập lần đầu
 
-1. Mở File Manager của HidenCloud, tải file [app.py](https://raw.githubusercontent.com/russel2138/tgll/main/app.py) từ GitHub về máy và upload vào `/home/container/app.py`
-2. Trong Startup, đặt `PY_FILE=app.py`, giữ runtime Python hiện tại
-3. Start server. Đợi thông báo `TGLL launcher ...`, tiến trình sẽ tiếp tục chạy để nhận lệnh
-4. Trong Console gõ `update` để tải các file launcher mới nhất từ repository. Sau update, Python tự khởi động lại
+1. Tải [main.py](https://raw.githubusercontent.com/russel2138/tgll/main/main.py) từ GitHub và upload đè `/home/container/main.py` trong File Manager của HidenCloud
+2. Giữ nguyên Startup `PY_FILE=main.py` như hiện tại
+3. Start server. `main.py` sẽ tự tải `app.py` từ GitHub trong lần chạy đầu tiên, sau đó mở launcher
+4. Trong Console gõ `update` để tải các file launcher mới nhất. Sau update, Python tự khởi động lại
 
 Nếu dùng `git clone` toàn bộ repository vào `/home/container`, lệnh `update` sẽ dùng `git pull --ff-only` thay vì tải các file riêng lẻ
 
@@ -45,7 +45,7 @@ Installer tải source chính thức của [Box64](https://github.com/ptitSeb/bo
 
 ## Quản lý dữ liệu
 
-File do launcher quản lý: `app.py`, `scripts/install_box64.py`, `README.md`
+File do launcher quản lý: `main.py`, `app.py`, `scripts/install_box64.py`, `README.md`
 
 Runtime, source build, logs nằm trong `.tgll-runtime/`, **không bị lệnh update xóa**
 
