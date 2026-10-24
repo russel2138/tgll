@@ -58,7 +58,7 @@ Dùng File Manager tạo file `/home/container/.tgll-command` có nội dung `up
 
 ## Box64
 
-Nhập `install-box64` sau khi đã đồng bộ phiên bản code mới. Script tải Box64 từ [upstream](https://github.com/ptitSeb/box64), tự cài CMake và Ninja trong `.tgll-runtime/build-tools`, build tối đa hai tác vụ đồng thời và cài tại `.tgll-runtime/box64`. Theo dõi `job` và `logs 50`
+Nhập `install-box64` sau khi đã đồng bộ phiên bản code mới. Script tải Box64 từ [upstream](https://github.com/ptitSeb/box64), tự cài CMake và Ninja trong `.tgll-runtime/build-tools` nếu cần, build tối đa hai tác vụ đồng thời và sao chép binary vào `.tgll-runtime/box64/bin/box64` mà không chạy `cmake --install` ghi vào `/usr/lib`. Nếu đã biên dịch thành công từ lần trước, script tái sử dụng binary và không build lại. Theo dõi `job` và `logs 50`
 
 **Chưa có Wine64, Xvfb, Mesa renderer hoặc bước chạy game TGLL**. Thành công với Box64 chưa có nghĩa chạy được game Windows x86-64 trên Linux ARM64
 
