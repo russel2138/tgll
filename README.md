@@ -60,6 +60,8 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `install-wine` | Tải Wine x64 WOW64 đã kiểm tra SHA256 vào `.tgll-runtime/wine` không cần root |
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
 | `install-display` | Tải Xvfb ARM64 và thư viện hỗ trợ (Debian, SHA256), thử X11 headless không cần root |
+| `test-graphics` | Mở Xvfb tạm, thử GLX và OpenGL CPU renderer (Mesa/llvmpipe) |
+
 | `wine-diagnose` | Kiểm tra Wine và xuất nguyên nhân lỗi `ntdll.so` qua `BOX64_LOG=2` |
 | `job` | Kiểm tra tác vụ cài đặt |
 | `logs 50` | Xem 50 dòng cuối log |
@@ -124,9 +126,25 @@ Nếu log Xvfb có `sh: 1: /usr/bin/xkbcomp: not found`, `XKB: Failed to compile
 
 **Chạy:** `update`, `install-display`, `logs 100`. Cần thấy `SUCCESS: Xvfb ARM64 display ... accepts X11 clients` mới coi là thành công. Chưa xác nhận trên HidenCloud cho tới khi smoke test trả kết quả thành công
 
+## Kiểm tra OpenGL software rendering (sau Xvfb)
+
+Khi `install-display` trả về `SUCCESS: Xvfb ARM64 display ... accepts X11 clients`, chạy:
+
+```text
+update
+test-graphics
+logs 100
+```
+
+Lệnh `test-graphics` khởi động lại một màn hình Xvfb tạm, thử một OpenGL context bằng thư viện `libGL.so.1` ARM64 và in `GL_VENDOR`, `GL_RENDERER`, `GL_VERSION`. Nếu `GL_RENDERER` chứa `llvmpipe` hoặc `softpipe`, có thể xác nhận việc render đang dùng CPU (không phải GPU). Theo Debian Wiki, chuỗi `llvmpipe` là chỉ dấu của Mesa software renderer
+
+Đây là diagnostic không cài thêm gói, không tự tải game, không chạy Wine, không giữ Xvfb lâu dài. Thử nghiệm được chạy trong subprocess để lỗi driver GLX không làm launcher Python chính sập. Nếu báo thiếu OpenGL context, lỗi Mesa driver, hoặc GLX unavailable, cần điều tra và bổ sung gói Mesa trước khi khởi chạy TGLL
+
+Quan trọng: OpenGL native ARM64 chạy được không bảo đảm toàn bộ pipeline **Wine x64 → Box64 → Unity Direct3D/OpenGL** chạy được. Bản game cần được upload lên host và kiểm thử riêng sau bước này
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
