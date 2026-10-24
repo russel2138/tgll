@@ -218,7 +218,30 @@ def await_listening(port, proc):
     raise RuntimeError(f"x11vnc did not listen on TCP port {port}")
 
 
+def limit_cpu_one_core():
+    """Pin the whole game session to one allowed logical CPU.
+
+    The Xvfb, VNC, Wine and Box64 children inherit this CPU affinity.
+    Fail closed if the limit cannot be enforced.
+    """
+    if not hasattr(os, "sched_getaffinity") or not hasattr(os, "sched_setaffinity"):
+        raise RuntimeError("Linux CPU affinity unavailable; cannot enforce 1-CPU limit")
+    allowed = sorted(os.sched_getaffinity(0))
+    if not allowed:
+        raise RuntimeError("No CPUs available in hosting cpuset")
+    cpu = allowed[0]
+    try:
+        os.sched_setaffinity(0, {cpu})
+    except OSError as error:
+        raise RuntimeError(f"Cannot enforce 1-CPU affinity: {error}") from error
+    if os.sched_getaffinity(0) != {cpu}:
+        raise RuntimeError("CPU affinity verification failed; game will not start unrestricted")
+    log(f"CPU LIMIT: one logical CPU (CPU {cpu}); Wine, Box64, Xvfb and VNC inherit it")
+    return cpu
+
+
 def main():
+    cpu_core = limit_cpu_one_core()
     validate()
     ensure_local_socket_dir()
     build_xkb_shim()
@@ -314,6 +337,8 @@ def main():
             "game_resolution": f"{width}x{height}",
             "vnc_resolution": "640x480" if vnc_scale else f"{width}x{height}",
             "game": PROFILE["name"],
+            "cpu_limit": "1 logical CPU",
+            "cpu_affinity_core": cpu_core,
             "game_pid": game.pid,
             "vnc_pid": vnc.pid,
             "xvfb_pid": xvfb.pid,
