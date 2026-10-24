@@ -15,7 +15,7 @@ import socket
 import subprocess
 import time
 
-from game_profiles import current_game
+from game_profiles import current_game, selected_key
 from install_display import (
     BIN as XVFB, ROOT, RUNTIME, XKB_DATA,
     build_xkb_shim, ensure_local_socket_dir, env_for_display, probe_x11,
@@ -224,10 +224,19 @@ def main():
     build_xkb_shim()
     public, port = config()
     display = pick_display()
-    width = int(os.environ.get("GAME_WIDTH", "640"))
-    height = int(os.environ.get("GAME_HEIGHT", "480"))
+    # Keep independent resolutions for TGLL and ModDP250. ModDP250's
+    # 800x600 UI is clipped by the old 640x480 Xvfb framebuffer.
+    default_size = (800, 600) if selected_key() == "moddp250" else (640, 480)
+    resolution_file = RUNTIME / "game-resolutions.json"
+    if resolution_file.is_file():
+        saved = json.loads(resolution_file.read_text(encoding="utf-8"))
+        size = saved.get(selected_key(), list(default_size))
+    else:
+        size = default_size
+    width = int(os.environ.get("GAME_WIDTH", size[0]))
+    height = int(os.environ.get("GAME_HEIGHT", size[1]))
     if not 320 <= width <= 960 or not 240 <= height <= 720:
-        raise ValueError("GAME_WIDTH/GAME_HEIGHT out of supported range")
+        raise ValueError("Game resolution out of supported range 320x240...960x720")
     RUNTIME.mkdir(parents=True, exist_ok=True)
     xenv = env_for_display()
     wenv = wine_env(xenv, display)
