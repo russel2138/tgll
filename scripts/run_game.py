@@ -270,14 +270,28 @@ def main():
         else:
             raise RuntimeError("Xvfb X11 socket failed")
 
-        vnc = spawn("x11vnc", [
+        # Render the complete game at its native virtual framebuffer size,
+        # but send a smaller 640x480 VNC image for compact remote viewing.
+        # x11vnc maps mouse coordinates back to the full X11 display.
+        vnc_scale = (PROFILE["name"] == "ModDP250" and
+                     (width > 640 or height > 480))
+        if VNC_SETTINGS.is_file():
+            vnc_scale = bool(json.loads(VNC_SETTINGS.read_text(
+                encoding="utf-8")).get("scale", vnc_scale))
+        vnc_args = [
             str(VNC), "-norc", "-display", display,
             "-rfbport", str(port),
             "-listen", "0.0.0.0" if public else "127.0.0.1",
             "-no6", "-rfbauth", str(PASSWORD_FILE),
             "-forever", "-shared", "-ncache", "0",
             "-deferupdate", "100", "-nolookup",
-        ], venv, VNC_LOG)
+        ]
+        if vnc_scale:
+            vnc_args += ["-scale", "640x480"]
+            log(f"VNC output: 640x480 (full game framebuffer: {width}x{height})")
+        else:
+            log(f"VNC output: {width}x{height} (1:1)")
+        vnc = spawn("x11vnc", vnc_args, venv, VNC_LOG)
         await_listening(port, vnc)
         log("VNC server ready; use TigerVNC Viewer with host:port")
 
@@ -297,6 +311,8 @@ def main():
             "display": display,
             "vnc_port": port,
             "vnc_public": public,
+            "game_resolution": f"{width}x{height}",
+            "vnc_resolution": "640x480" if vnc_scale else f"{width}x{height}",
             "game": PROFILE["name"],
             "game_pid": game.pid,
             "vnc_pid": vnc.pid,
