@@ -181,8 +181,9 @@ def main():
     if PASSWORD_FILE.is_file():
         say("Private VNC password file already exists; preserving it.")
     else:
-        set_password()
-    say("SUCCESS: Rootless x11vnc installed; start the display with game-start.")
+        say("VNC authentication not yet configured: run vnc-password in launcher console")
+        say("The password will be shown once in the console, not stored in installer logs.")
+    say("SUCCESS: Rootless x11vnc installed.")
     say("Default VNC bind is localhost; enable public access only explicitly.")
 
 
