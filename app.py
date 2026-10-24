@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.14"
+VERSION = "2026.10.24.15"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
