@@ -14,6 +14,8 @@ import tarfile
 import traceback
 import urllib.request
 
+from install_x86_libs import LIB_DIR, ensure_libgcc
+
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME = ROOT / ".tgll-runtime"
 BOX64 = RUNTIME / "box64" / "bin" / "box64"
@@ -109,6 +111,17 @@ def extract(archive):
             shutil.rmtree(staging)
 
 
+def box64_env():
+    env = os.environ.copy()
+    current = env.get("BOX64_LD_LIBRARY_PATH", "")
+    paths = [str(LIB_DIR)] if LIB_DIR.is_dir() else []
+    if current:
+        paths.append(current)
+    if paths:
+        env["BOX64_LD_LIBRARY_PATH"] = os.pathsep.join(paths)
+    return env
+
+
 def diagnose_wine(wine):
     """Collect actionable Box64 loader errors without installing anything."""
     import collections
@@ -128,7 +141,7 @@ def diagnose_wine(wine):
                 log("ntdll dependency: " + line.strip())
     else:
         log("readelf unavailable; native libunwind lookup is only a hint")
-    env = os.environ.copy()
+    env = box64_env()
     env["BOX64_LOG"] = "2"
     env["BOX64_DLSYM_ERROR"] = "1"
     env["BOX64_NOBANNER"] = "0"
@@ -169,8 +182,9 @@ def wine_version():
     wine = DEST / "bin" / "wine"
     if not wine.is_file():
         raise RuntimeError(f"Wine executable missing: {wine}")
-    env = os.environ.copy()
+    env = box64_env()
     env["BOX64_NOBANNER"] = "1"
+    log(f"Box64 x86_64 library path: {env.get('BOX64_LD_LIBRARY_PATH', '(default)')}")
     log(f"Testing: {BOX64} {wine} --version")
     try:
         result = subprocess.run(
@@ -210,6 +224,8 @@ def main():
             extract(download())
         else:
             log("Existing Wine directory found, reusing it")
+        if "--diagnose" not in sys.argv:
+            ensure_libgcc()
         wine_version()
     except Exception as error:
         RESULT.write_text("FAILED: " + str(error), encoding="utf-8")
