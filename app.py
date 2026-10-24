@@ -18,10 +18,9 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.16"
+VERSION = "2026.10.24.17"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
-COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
 MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
@@ -584,7 +583,6 @@ def main():
     RUNTIME.mkdir(parents=True, exist_ok=True)
     say(f"TGLL launcher {VERSION} | {platform.machine()}")
     say("Type 'help' in HidenCloud Console. Process remains online while idle.")
-    say(f"Fallback: create {COMMAND_FILE.name} in File Manager with a command")
     threading.Thread(target=stdin_reader, daemon=True).start()
     auto = RUNTIME / "game-autostart.json"
     if auto.is_file():
@@ -596,27 +594,17 @@ def main():
             say(f"Game autostart config error: {error}")
     while not STOPPING:
         try:
-            if COMMAND_FILE.is_file():
-                text = COMMAND_FILE.read_text(encoding="utf-8")
-                COMMAND_FILE.unlink()
-                for line in text.splitlines():
-                    if line.strip():
-                        COMMANDS.put(line)
-            try:
-                instruction = COMMANDS.get(timeout=2)
-            except queue.Empty:
-                continue
-            try:
-                handle(instruction)
-            except (OSError, ValueError, urllib.error.URLError, subprocess.SubprocessError) as error:
-                say(f"Command error: {error}")
-            except Exception as error:
-                say(f"Unexpected error ({type(error).__name__}): {error}")
+            instruction = COMMANDS.get(timeout=2)
+        except queue.Empty:
+            continue
+        try:
+            handle(instruction)
         except KeyboardInterrupt:
             STOPPING = True
-        except OSError as error:
-            say(f"File command error: {error}")
-            time.sleep(2)
+        except (OSError, ValueError, urllib.error.URLError, subprocess.SubprocessError) as error:
+            say(f"Command error: {error}")
+        except Exception as error:
+            say(f"Unexpected error ({type(error).__name__}): {error}")
     say("Launcher stopped")
 
 
