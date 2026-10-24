@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent low-overhead TGLL session for HidenCloud ARM64.
+"""Persistent low-overhead Unity game session for HidenCloud ARM64.
 
 Owns Xvfb, x11vnc, Wine+Box64, and one private WINEPREFIX. A supervisor keeps
 the session alive until game-stop; no desktop environment or GPU emulator.
@@ -15,6 +15,7 @@ import socket
 import subprocess
 import time
 
+from game_profiles import current_game
 from install_display import (
     BIN as XVFB, ROOT, RUNTIME, XKB_DATA,
     build_xkb_shim, ensure_local_socket_dir, env_for_display, probe_x11,
@@ -28,12 +29,13 @@ BOX64 = RUNTIME / "box64/bin/box64"
 WINE = RUNTIME / "wine/bin/wine"
 WINESERVER = RUNTIME / "wine/bin/wineserver"
 X64_LIBS = RUNTIME / "x86_64-libs"
-GAME = ROOT / "game"
-EXE = GAME / "TheGioiLangLa.exe"
-WINEPREFIX = RUNTIME / "wineprefix-test"
+PROFILE = current_game()
+GAME = ROOT / PROFILE["directory"]
+EXE = GAME / PROFILE["exe"]
+WINEPREFIX = RUNTIME / PROFILE["wineprefix"]
 SESSION_FILE = RUNTIME / "game-session.json"
 VNC_SETTINGS = RUNTIME / "vnc-settings.json"
-UNITY_LOG = RUNTIME / "game-live-Player.log"
+UNITY_LOG = RUNTIME / f"game-live-{PROFILE['name']}-Player.log"
 WINE_LOG = RUNTIME / "game-live-wine.log"
 XVFB_LOG = RUNTIME / "game-live-xvfb.log"
 VNC_LOG = RUNTIME / "game-live-vnc.log"
@@ -96,7 +98,8 @@ def validate():
     for path in (XVFB, VNC, BOX64, WINE, EXE, PASSWORD_FILE,
                  LIBDIR / "libEGL.so.1",
                  X64_LIBS / "libgcc_s.so.1",
-                 GAME / "UnityPlayer.dll", GAME / "GameAssembly.dll"):
+                 GAME / "UnityPlayer.dll", GAME / "GameAssembly.dll",
+                 GAME / PROFILE["data"] / "boot.config"):
         if not path.is_file():
             raise RuntimeError(f"Missing: {path}; install dependencies first")
     if not XKB_DATA.is_dir():
@@ -176,7 +179,7 @@ def wine_env(base, display):
         "DISPLAY": display,
         "WINEPREFIX": str(WINEPREFIX),
         "WINEARCH": "win64",
-        "WINEDEBUG": "-all",
+        "WINEDEBUG": "-all,err+all",
         "BOX64_LOG": "0",
         "BOX64_NOBANNER": "1",
         "LIBGL_ALWAYS_SOFTWARE": "1",
@@ -232,7 +235,7 @@ def main():
     venv["DISPLAY"] = display
     start = time.monotonic()
     memory_max = 0
-    log(f"Starting TGLL VPS session on Xvfb {display} {width}x{height}x24")
+    log(f"Starting {PROFILE['name']} VPS session on Xvfb {display} {width}x{height}x24")
     log("Optimization: shared headless Xvfb, no desktop environment, "
         "no VNC framebuffer cache, suppressed Box64/Wine debug logs")
     log(f"VNC TCP port {port}, bind {'0.0.0.0 (PUBLIC)' if public else '127.0.0.1 (LOCAL ONLY)'}")
@@ -280,22 +283,23 @@ def main():
             log("Unity Player.log disabled for long-term low-I/O operation")
         else:
             exe_args.extend(["-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\")])
-        game = spawn("TGLL", exe_args, wenv, WINE_LOG, GAME)
+        game = spawn(PROFILE["name"], exe_args, wenv, WINE_LOG, GAME)
         SESSION_FILE.write_text(json.dumps({
             "display": display,
             "vnc_port": port,
             "vnc_public": public,
+            "game": PROFILE["name"],
             "game_pid": game.pid,
             "vnc_pid": vnc.pid,
             "xvfb_pid": xvfb.pid,
             "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         }, indent=2), encoding="utf-8")
-        log(f"TGLL running as PID {game.pid}; supervisor persists until game-stop")
+        log(f"{PROFILE['name']} running as PID {game.pid}; supervisor persists until game-stop")
         last_sample = -30
         while not STOP:
             now = time.monotonic()
             if game.poll() is not None:
-                log(f"TGLL launcher exited (code {game.returncode}); stopping session")
+                log(f"{PROFILE['name']} launcher exited (code {game.returncode}); stopping session")
                 break
             if xvfb.poll() is not None:
                 log("Xvfb exited unexpectedly; stopping session")
@@ -313,15 +317,15 @@ def main():
                     log(f"Unity log size: {UNITY_LOG.stat().st_size / 1024:.0f} KiB")
             time.sleep(2)
     finally:
-        log("Stopping TGLL session: Wine -> wineserver -> VNC -> Xvfb")
-        terminate_child("TGLL")
+        log(f"Stopping {PROFILE['name']} session: Wine -> wineserver -> VNC -> Xvfb")
+        terminate_child(PROFILE["name"])
         stop_private_wine(wenv)
         terminate_child("x11vnc")
         terminate_child("Xvfb")
         SESSION_FILE.unlink(missing_ok=True)
         log(f"Peak cgroup RAM observed: {memory_max / 2**20:.0f} MiB")
         resources()
-        log("TGLL session stopped; game files, Wine prefix and credentials preserved")
+        log(f"{PROFILE['name']} session stopped; files, prefix and VNC credentials preserved")
 
 
 if __name__ == "__main__":
