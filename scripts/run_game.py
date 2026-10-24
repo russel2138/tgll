@@ -274,8 +274,12 @@ def main():
             str(BOX64), str(WINE), str(EXE),
             "-screen-fullscreen", "0",
             "-screen-width", str(width), "-screen-height", str(height),
-            "-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\"),
         ]
+        if os.environ.get("GAME_UNITY_LOG", "1") == "0":
+            exe_args.append("-nolog")
+            log("Unity Player.log disabled for long-term low-I/O operation")
+        else:
+            exe_args.extend(["-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\")])
         game = spawn("TGLL", exe_args, wenv, WINE_LOG, GAME)
         SESSION_FILE.write_text(json.dumps({
             "display": display,
