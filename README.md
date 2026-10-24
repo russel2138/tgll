@@ -59,6 +59,7 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `install-box64` | Biên dịch Box64 không cần root |
 | `install-wine` | Tải Wine x64 WOW64 đã kiểm tra SHA256 vào `.tgll-runtime/wine` không cần root |
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
+| `install-display` | Tải Xvfb ARM64 và thư viện hỗ trợ (Debian, SHA256), thử X11 headless không cần root |
 | `wine-diagnose` | Kiểm tra Wine và xuất nguyên nhân lỗi `ntdll.so` qua `BOX64_LOG=2` |
 | `job` | Kiểm tra tác vụ cài đặt |
 | `logs 50` | Xem 50 dòng cuối log |
@@ -99,9 +100,21 @@ Nếu log Box64 có `Error loading needed lib libgcc_s.so.1`, nguyên nhân là 
 
 Nên thấy `Installed amd64 libgcc_s.so.1 without root` và bước `Testing ... wine --version`. Nếu chuyển sang lỗi thư viện khác, xem `wine-diagnose` trước khi cài thêm phụ thuộc. Khi `wine-version` chạy thành công, vẫn cần Xvfb và software rendering trước khi thử game
 
+## Xvfb (bước tiếp theo sau Wine)
+
+Sau khi log có `SUCCESS: Portable Wine works through Box64`, chạy `update`, `install-display`, rồi `logs 100`
+
+- Installer lấy gói `xvfb`, `libunwind8`, `libxfont2` và `libfontenc1` **ARM64 Debian Bookworm**. Từng gói có SHA256 cố định theo nguồn Debian, được trích xuất vào `.tgll-runtime/display` bằng `dpkg-deb --extract` mà không cần sudo
+- Các thư viện ARM64 được đặt riêng trong `LD_LIBRARY_PATH` của tiến trình Xvfb, không trộn với `BOX64_LD_LIBRARY_PATH` x86-64 dành cho Wine
+- Installer thử Xvfb `:90..`:99 với màn hình ảo 640×480, chỉ mở UNIX socket, không mở TCP. Dùng `libX11` kiểm tra kết nối rồi tắt màn hình thử
+- Nếu `ldd` phát hiện thiếu thư viện ARM64, log sẽ liệt kê `not found` và dừng an toàn. Không đánh dấu thành công khi chưa test được
+- `SUCCESS: Xvfb ARM64 display ... accepts X11 clients` chỉ xác nhận màn hình ảo dùng được, **chưa chứng minh OpenGL software renderer (llvmpipe) hoạt động** và chưa khởi chạy TGLL
+
+Phần start/stop display lâu dài, kiểm tra OpenGL và khởi động game sẽ được làm sau khi Xvfb thử nghiệm thành công
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
