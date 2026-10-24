@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.9"
+VERSION = "2026.10.24.10"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -308,7 +308,7 @@ def handle(line):
     cmd = cmd.lower()
     if cmd in ("help", "?"):
         say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
-        say("          install-display | job | logs [N]")
+        say("          install-display | test-graphics | job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
         say("Tip: .tgll-command file also works if panel console input is unavailable.")
@@ -326,6 +326,8 @@ def handle(line):
         launch_job("wine-diagnose", ROOT / "scripts" / "install_wine.py", ("--diagnose",))
     elif cmd == "install-display":
         launch_job("display-setup", ROOT / "scripts" / "install_display.py")
+    elif cmd == "test-graphics":
+        launch_job("graphics-test", ROOT / "scripts" / "test_graphics.py")
     elif cmd == "wine-version":
         box64 = RUNTIME / "box64" / "bin" / "box64"
         wine = RUNTIME / "wine" / "bin" / "wine"
