@@ -13,6 +13,8 @@ import signal
 import subprocess
 import time
 
+from install_graphics_libs import env_for_game_graphics
+
 from install_display import (
     BIN as XVFB, ROOT, RUNTIME, XKB_DATA,
     build_xkb_shim, ensure_local_socket_dir, env_for_display, probe_x11,
@@ -24,7 +26,7 @@ WINESERVER = RUNTIME / "wine" / "bin" / "wineserver"
 X64_LIBS = RUNTIME / "x86_64-libs"
 GAME = ROOT / "game"
 EXE = GAME / "TheGioiLangLa.exe"
-UNITY_LOG = GAME / "Player.log"
+UNITY_LOG = RUNTIME / "game-Player.log"
 WINE_LOG = RUNTIME / "game-wine.log"
 WINEPREFIX = RUNTIME / "wineprefix-test"
 MAX_TEST_SECONDS = 120
@@ -102,17 +104,20 @@ def validate_setup():
         raise RuntimeError("Missing amd64 libgcc; run install-wine first")
     if not XKB_DATA.is_dir():
         raise RuntimeError("XKB data not found; run install-display first")
+    if not (RUNTIME / "graphics-native" / "usr/lib/aarch64-linux-gnu/libEGL.so.1").is_file():
+        raise RuntimeError("Native graphics libraries not installed; run install-graphics-libs first")
 
 
 def make_wine_env(base, display):
-    env = base.copy()
+    env = env_for_game_graphics(base)
     # LD_PRELOAD helper is strictly for Xvfb, never inject it into Box64/Wine.
     env.pop("LD_PRELOAD", None)
     env.pop("TGLL_XKBCOMP_PATH", None)
     env["DISPLAY"] = display
     env["WINEPREFIX"] = str(WINEPREFIX)
     env["WINEARCH"] = "win64"
-    env["WINEDEBUG"] = "-all"
+    env["WINEDEBUG"] = "-all,err+all,warn+loaddll"
+    env["BOX64_LOG"] = "1"
     env["BOX64_NOBANNER"] = "1"
     env["BOX64_LD_LIBRARY_PATH"] = str(X64_LIBS) + (
         os.pathsep + env["BOX64_LD_LIBRARY_PATH"]
@@ -137,6 +142,28 @@ def close_private_wineserver(env):
         pass
 
 
+def process_snapshot():
+    """Show whether Wine/Unity children are waiting, instead of guessing from CPU."""
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid,ppid,stat,wchan:22,rss,args"],
+            capture_output=True, text=True, check=False, timeout=8,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        say("Process snapshot unavailable (ps missing or timed out)")
+        return
+    lines = result.stdout.splitlines()
+    important = ("wine", "box64", "thegioi", "wineserver", "xvfb")
+    relevant = [row.strip() for row in lines[1:]
+                if any(word in row.lower() for word in important)]
+    say("--- Process snapshot (state/wait channel/RSS KiB) ---")
+    say(lines[0] if lines else "ps returned no data")
+    for row in relevant[:18]:
+        say(row)
+    if not relevant:
+        say("No matching Wine/Box64/Xvfb processes visible")
+
+
 def main():
     validate_setup()
     RUNTIME.mkdir(parents=True, exist_ok=True)
@@ -158,6 +185,7 @@ def main():
     cpu_start = cpu_usage_seconds()
     peak_memory = 0
     started = time.monotonic()
+    next_snapshot = 12
     try:
         with xvfb_log.open("w", encoding="utf-8") as stream:
             xvfb = subprocess.Popen([
@@ -180,7 +208,7 @@ def main():
             str(BOX64), str(WINE), str(EXE),
             "-screen-fullscreen", "0",
             "-screen-width", "640", "-screen-height", "480",
-            "-logFile", "Player.log",
+            "-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\"),
         ]
         say("Starting TGLL Windows executable through Wine (no login automation)")
         with WINE_LOG.open("w", encoding="utf-8") as stream:
@@ -192,6 +220,9 @@ def main():
         while True:
             now = time.monotonic()
             elapsed = now - started
+            if elapsed >= next_snapshot:
+                process_snapshot()
+                next_snapshot += 30
             memory = cgroup_number("memory.current")
             if memory is not None:
                 peak_memory = max(peak_memory, memory)
@@ -224,7 +255,7 @@ def main():
             say(f"Container CPU time during test: {cpu_end - cpu_start:.1f}s")
         say(f"Wine log: {WINE_LOG}")
         say(f"Xvfb log: {xvfb_log}")
-        say(f"Unity player log: {UNITY_LOG}")
+        say(f"Unity player log (explicit Windows Z: path): {UNITY_LOG}")
         say("--- Wine log tail ---")
         tail_file(WINE_LOG, 30)
         say("--- Unity Player.log tail ---")
