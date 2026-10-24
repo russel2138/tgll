@@ -17,7 +17,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.4"
+VERSION = "2026.10.24.5"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
@@ -204,7 +204,7 @@ def run_bash(command, cwd=None):
         say(f"[bash] {error}")
 
 
-def launch_job(name, script):
+def launch_job(name, script, args=()):
     job = job_info()
     if job and job["running"]:
         say(f"Another job is running: {job.get('name')} PID {job.get('pid')}")
@@ -217,7 +217,7 @@ def launch_job(name, script):
     try:
         with log_file.open("w", encoding="utf-8") as stream:
             proc = subprocess.Popen(
-                [sys.executable, "-u", str(script)],
+                [sys.executable, "-u", str(script), *args],
                 cwd=ROOT,
                 stdin=subprocess.DEVNULL,
                 stdout=stream,
@@ -275,7 +275,7 @@ def handle(line):
     cmd, _, arg = line.partition(" ")
     cmd = cmd.lower()
     if cmd in ("help", "?"):
-        say("Commands: help | status | update | restart | install-box64 | install-wine | wine-version")
+        say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
         say("          job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
@@ -290,6 +290,8 @@ def handle(line):
         launch_job("box64-setup", ROOT / "scripts" / "install_box64.py")
     elif cmd == "install-wine":
         launch_job("wine-setup", ROOT / "scripts" / "install_wine.py")
+    elif cmd == "wine-diagnose":
+        launch_job("wine-diagnose", ROOT / "scripts" / "install_wine.py", ("--diagnose",))
     elif cmd == "wine-version":
         box64 = RUNTIME / "box64" / "bin" / "box64"
         wine = RUNTIME / "wine" / "bin" / "wine"
