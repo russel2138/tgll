@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.15"
+VERSION = "2026.10.24.16"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -407,40 +407,57 @@ def handle(line):
 
     cmd, _, arg = line.partition(" ")
     cmd = cmd.lower()
+    # Everyday one-word commands control the game, never the launcher.
+    aliases = {
+        "start": "game-start",
+        "stop": "game-stop",
+        "restart": "game-restart",
+        "status": "game-status",
+        "vnc": "vnc-info",
+    }
+    cmd = aliases.get(cmd, cmd)
     if cmd in ("help", "?"):
-        say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
-        say("          install-display | test-graphics | install-graphics-libs | game-install | test-game")
-        say("          install-vnc | vnc-password | vnc-public [on|off] [port]")
-        say("          game-start | game-stop | game-restart | game-autostart on|off")
-        say("          game-status | game-screenshot | mem")
-        say("          job | logs [N]")
-        say("          bash [command] | bash (enter shell mode) | job-stop | stop")
-        say("Use bash <command> for one command. In bash mode use 'exit' to return.")
-        say("Tip: .tgll-command file also works if panel console input is unavailable.")
-    elif cmd == "status":
+        if arg.strip().lower() in ("advanced", "setup"):
+            say("Maintenance (not needed for daily VPS use):")
+            say("  setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
+            say("  launcher-status | launcher-restart | job | job-stop")
+            say("  game-screenshot | bash [command] | bash | quit")
+            say("  Tip: launcher stays online after stopping the game.")
+        else:
+            say("TGLL VPS Commands:")
+            say("  start           Start game + VNC")
+            say("  stop            Stop game + Wine + VNC (launcher stays online)")
+            say("  restart         Restart game + VNC")
+            say("  status          Game/VNC status and RAM")
+            say("  vnc-info        Show TigerVNC address and locally saved password")
+            say("  vnc-password    Set new VNC password")
+            say("  vnc-public on|off [port]   Remote access settings")
+            say("  mem | logs [N] | update | game-autostart on|off")
+            say("  help advanced   Installer/testing/diagnostic commands")
+    elif cmd == "launcher-status":
         status()
     elif cmd == "update":
         update()
-    elif cmd == "restart":
+    elif cmd == "launcher-restart":
         restart()
-    elif cmd == "install-box64":
-        launch_job("box64-setup", ROOT / "scripts" / "install_box64.py")
-    elif cmd == "install-wine":
-        launch_job("wine-setup", ROOT / "scripts" / "install_wine.py")
-    elif cmd == "wine-diagnose":
-        launch_job("wine-diagnose", ROOT / "scripts" / "install_wine.py", ("--diagnose",))
-    elif cmd == "install-display":
-        launch_job("display-setup", ROOT / "scripts" / "install_display.py")
-    elif cmd == "test-graphics":
-        launch_job("graphics-test", ROOT / "scripts" / "test_graphics.py")
-    elif cmd == "game-install":
-        launch_job("game-install", ROOT / "scripts" / "install_game.py")
-    elif cmd == "install-graphics-libs":
-        launch_job("graphics-libs-setup", ROOT / "scripts" / "install_graphics_libs.py")
-    elif cmd == "test-game":
-        launch_job("game-test", ROOT / "scripts" / "test_game.py")
-    elif cmd == "install-vnc":
-        launch_job("vnc-setup", ROOT / "scripts" / "install_vnc.py")
+    elif cmd == "setup":
+        action = arg.strip().lower()
+        jobs = {
+            "box64": ("box64-setup", "install_box64.py", ()),
+            "wine": ("wine-setup", "install_wine.py", ()),
+            "display": ("display-setup", "install_display.py", ()),
+            "graphics": ("graphics-libs-setup", "install_graphics_libs.py", ()),
+            "vnc": ("vnc-setup", "install_vnc.py", ()),
+            "game": ("game-install", "install_game.py", ()),
+            "test-game": ("game-test", "test_game.py", ()),
+            "test-graphics": ("graphics-test", "test_graphics.py", ()),
+            "wine-diagnose": ("wine-diagnose", "install_wine.py", ("--diagnose",)),
+        }
+        if action not in jobs:
+            say("Usage: setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
+        else:
+            name, filename, options = jobs[action]
+            launch_job(name, ROOT / "scripts" / filename, options)
     elif cmd == "vnc-password":
         installer = ROOT / "scripts" / "install_vnc.py"
         if not installer.is_file():
@@ -455,6 +472,19 @@ def handle(line):
                 say(result.stderr.strip()[-1200:])
             if result.returncode:
                 say(f"VNC password generation failed (exit {result.returncode})")
+    elif cmd == "vnc-info":
+        helper = ROOT / "scripts" / "vnc_info.py"
+        if not helper.is_file():
+            say("VNC info helper missing; run update first")
+        else:
+            result = subprocess.run(
+                [sys.executable, "-u", str(helper)],
+                cwd=ROOT, capture_output=True, text=True,
+                timeout=20, check=False,
+            )
+            say(result.stdout.strip() or result.stderr.strip())
+            if result.returncode:
+                say(f"VNC info failed (exit {result.returncode})")
     elif cmd == "vnc-public":
         vnc_options(arg)
     elif cmd == "game-autostart":
@@ -513,22 +543,6 @@ def handle(line):
                 cwd=ROOT, env=env, capture_output=True, text=True, timeout=15, check=False,
             )
             say(result.stdout.strip() or result.stderr.strip())
-    elif cmd == "wine-version":
-        box64 = RUNTIME / "box64" / "bin" / "box64"
-        wine = RUNTIME / "wine" / "bin" / "wine"
-        if not box64.is_file() or not wine.is_file():
-            say("Box64 or Wine not installed. Run install-box64 and install-wine first")
-        else:
-            env = os.environ.copy()
-            libs = RUNTIME / "x86_64-libs"
-            if libs.is_dir():
-                env["BOX64_LD_LIBRARY_PATH"] = str(libs) + (
-                    os.pathsep + env["BOX64_LD_LIBRARY_PATH"]
-                    if env.get("BOX64_LD_LIBRARY_PATH") else ""
-                )
-            result = subprocess.run([str(box64), str(wine), "--version"],
-                                    env=env, check=False, timeout=60)
-            say(f"[wine-version] exit code: {result.returncode}")
     elif cmd == "job":
         job = job_info()
         say(json.dumps(job, indent=2) if job else "No job recorded")
@@ -550,7 +564,7 @@ def handle(line):
             say("Type 'exit' to return to launcher")
         else:
             run_bash(arg)
-    elif cmd in ("stop", "quit"):
+    elif cmd == "quit":
         say("Stopping launcher. HidenCloud may label exit 0 as offline/crash.")
         STOPPING = True
     else:
