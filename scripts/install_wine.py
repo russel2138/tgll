@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ctypes.util
 import os
 from pathlib import Path
 import platform
@@ -108,6 +109,62 @@ def extract(archive):
             shutil.rmtree(staging)
 
 
+def diagnose_wine(wine):
+    """Collect actionable Box64 loader errors without installing anything."""
+    import collections
+
+    dll = DEST / "lib" / "wine" / "x86_64-unix" / "ntdll.so"
+    log("=== Wine/Box64 loader diagnostics ===")
+    log(f"Wine ntdll.so: {'present' if dll.is_file() else 'MISSING'} ({dll})")
+    log(f"Native libunwind lookup: {ctypes.util.find_library('unwind') or 'not found'}")
+    readelf = shutil.which("readelf")
+    if readelf and dll.is_file():
+        info = subprocess.run(
+            [readelf, "-d", str(dll)], capture_output=True, text=True,
+            timeout=10, check=False,
+        )
+        for line in info.stdout.splitlines():
+            if "(NEEDED)" in line:
+                log("ntdll dependency: " + line.strip())
+    else:
+        log("readelf unavailable; native libunwind lookup is only a hint")
+    env = os.environ.copy()
+    env["BOX64_LOG"] = "2"
+    env["BOX64_DLSYM_ERROR"] = "1"
+    env["BOX64_NOBANNER"] = "0"
+    debug_path = RUNTIME / "wine-debug.log"
+    log("Capturing Box64 loader diagnostics...")
+    try:
+        with debug_path.open("w", encoding="utf-8") as stream:
+            result = subprocess.run(
+                [str(BOX64), str(wine), "--version"],
+                stdout=stream, stderr=subprocess.STDOUT, env=env,
+                timeout=45, check=False,
+            )
+        log(f"Verbose Box64 exit code: {result.returncode}")
+    except subprocess.TimeoutExpired:
+        log("Verbose Box64 command timed out after 45s")
+    log(f"Full diagnostic log: {debug_path}")
+    keywords = ("error", "cannot", "missing", "symbol", "unwind",
+                "relocat", "ntdll", "needed lib", "not found",
+                "wine64", "wine preloader", "libc.so")
+    # Bounded memory even when Box64 prints a large debug log.
+    highlights = collections.deque(maxlen=65)
+    tail = collections.deque(maxlen=15)
+    with debug_path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            tail.append(line.rstrip())
+            if any(term in line.lower() for term in keywords):
+                highlights.append(line.rstrip())
+    log("--- Relevant loader messages (last 65 matches) ---")
+    for line in highlights:
+        log(line)
+    log("--- End of diagnostic output (last 15 lines) ---")
+    for line in tail:
+        log(line)
+    log("No packages were installed by this diagnostic run.")
+
+
 def wine_version():
     wine = DEST / "bin" / "wine"
     if not wine.is_file():
@@ -128,9 +185,11 @@ def wine_version():
     if result.stderr.strip():
         log(result.stderr.strip()[-4000:])
     if result.returncode != 0:
+        diagnose_wine(wine)
         raise RuntimeError(
-            f"Wine version check failed (exit {result.returncode}); "
-            "the host may lack required native libraries. Wine files were kept."
+            f"Wine version check failed (exit {result.returncode}). "
+            "See diagnostic messages above or .tgll-runtime/wine-debug.log. "
+            "Wine files were kept."
         )
     log(f"SUCCESS: Portable Wine works through Box64 at {wine}")
     log("Next step is a display server and software rendering; do not run TGLL yet.")
@@ -145,6 +204,8 @@ def main():
     if not BOX64.is_file():
         raise RuntimeError("Box64 missing. Run install-box64 first.")
     try:
+        if "--diagnose" in sys.argv and not (DEST / "bin" / "wine").is_file():
+            raise RuntimeError("Wine is not extracted; run install-wine first")
         if not (DEST / "bin" / "wine").is_file():
             extract(download())
         else:
