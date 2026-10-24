@@ -61,6 +61,7 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
 | `install-display` | Tải Xvfb ARM64 và thư viện hỗ trợ (Debian, SHA256), thử X11 headless không cần root |
 | `test-graphics` | Mở Xvfb tạm, thử GLX và OpenGL CPU renderer (Mesa/llvmpipe) |
+| `install-graphics-libs` | Cài riêng các thư viện X11/EGL ARM64 đang thiếu cho Box64 + Wine, không cần root |
 | `game-install` | Giải nén ZIP TGLL đã upload vào thư mục game, không sửa EXE |
 | `test-game` | Thử khởi chạy TGLL tối đa 120 giây bằng Wine + Box64 + Xvfb, lưu log/CPU/RAM |
 
@@ -182,9 +183,32 @@ Sau 120 giây script dừng tiến trình test và Wine server dùng prefix riê
 
 **Chú ý:** Khởi động tiến trình không có nghĩa game đã mở thành công hay đã đăng nhập. Ở bước này chưa có VNC để thao tác với game, chưa có cơ chế treo lâu dài; cần xem kết quả chạy thử trước. Box64/Wine/llvmpipe trên quota 2 vCPU có thể chạy chậm hoặc thiếu RAM
 
+### Sửa lỗi thiếu thư viện ARM64 khi chạy game
+
+Nếu `game-wine.log` báo `Error initializing native libXinerama.so.1`, `libXcomposite.so.1`, `libxkbregistry.so.0` hoặc `libEGL.so.1`, hãy chạy:
+
+```text
+update
+install-graphics-libs
+logs 100
+```
+
+Installer tải các gói Debian Bookworm **ARM64**, xác minh SHA256 theo Debian Packages.xz và chỉ giải nén vào `.tgll-runtime/graphics-native`. Các gói gồm `libxinerama1`, `libxcomposite1`, `libxkbregistry0`, `libegl1`, `libxkbcommon0`, `libglvnd0`, `libegl-mesa0`. Tạo các alias `.so` riêng để Box64 có thể `dlopen` thư viện. Không gọi `sudo`, không sửa system libs, không thay thư viện Wine x86-64
+
+Lệnh sẽ thử `dlopen` cả bốn thư viện bằng trình nạp ARM64, báo rõ tên thư viện thiếu dependency nếu còn. Bản game test sau đó truyền `LD_LIBRARY_PATH` riêng chỉ cho Wine/Box64, tránh thay đổi tiến trình Xvfb đã hoạt động
+
+Nếu thành công, chạy:
+
+```text
+test-game
+logs 150
+```
+
+Phiên bản thử game từ **2026.10.24.12** ghi log Wine `err+all`, các tiến trình Wine/Unity (kèm trạng thái chờ), và dùng đường dẫn `Z:\\home\\container\\.tgll-runtime\\game-Player.log` cho Unity. Vì thế nếu game vẫn đứng, có thêm bằng chứng để phân biệt thiếu DLL, chờ wineserver hay lỗi driver. Không tự giả định lỗi Xinerama/EGL là nguyên nhân duy nhất
+
 ## Dữ liệu và cập nhật
 
-- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/test_game.py`, `README.md` là các file launcher do lệnh update tự cập nhật
+- `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `scripts/test_graphics.py`, `scripts/install_game.py`, `scripts/install_graphics_libs.py`, `scripts/test_game.py`, `README.md` là các file launcher do lệnh update tự cập nhật
 - `.tgll-runtime/` chứa runtime, logs và source build, không bị lệnh update ở chế độ tải trực tiếp xóa
 - Game và dữ liệu tài khoản là dữ liệu riêng, không đưa vào Git hoặc xóa lúc Reinstall khi chưa sao lưu
 - Git pull có thể bị từ chối nếu bạn chỉnh sửa các file theo dõi trong Git trên server. Không sửa trực tiếp các file launcher trên host nếu muốn update ổn định
