@@ -65,6 +65,7 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `vnc-password` | Tạo mật khẩu VNC ngẫu nhiên, hiển thị một lần trong Console |
 | `vnc-public` | Điều khiển VNC local/public và cổng TCP |
 | `game-start`, `game-stop`, `game-restart` | Quản lý phiên treo dài hạn |
+| `game-autostart on|off` | Bật/tắt tự khởi chạy game sau khi container/launcher restart |
 | `game-status`, `mem`, `game-screenshot` | Trạng thái/RAM và ảnh màn hình đang chạy |
 | `install-graphics-libs` | Cài riêng các thư viện X11/EGL ARM64 đang thiếu cho Box64 + Wine, không cần root |
 | `game-install` | Giải nén ZIP TGLL đã upload vào thư mục game, không sửa EXE |
@@ -278,6 +279,7 @@ logs 100
 ```
 
 - `game-start`: chạy màn hình ảo Xvfb 640×480, VNC và TGLL qua Box64/Wine; **không có thời hạn tự tắt 120 giây**
+- `game-autostart on`: tự gọi `game-start` sau khi HidenCloud khởi động lại launcher, phù hợp treo VPS; mặc định **off**, tắt bằng `game-autostart off`. Bật chế độ này chỉ sau khi VNC, đăng nhập và RAM đã được kiểm tra
 - `game-stop`: dừng riêng game và tiến trình phụ trợ, giữ nguyên Wine prefix và dữ liệu đăng nhập
 - `game-restart`: dừng gọn rồi chạy lại, không tải lại game
 - `game-status`: PID game, display, VNC port và trạng thái RAM hiện tại
