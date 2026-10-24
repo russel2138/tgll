@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import platform
 import signal
+import sys
 import subprocess
 import time
 
@@ -30,6 +31,7 @@ UNITY_LOG = RUNTIME / "game-Player.log"
 WINE_LOG = RUNTIME / "game-wine.log"
 WINEPREFIX = RUNTIME / "wineprefix-test"
 MAX_TEST_SECONDS = 120
+CAPTURE_SCRIPT = ROOT / "scripts" / "capture_game_screen.py"
 
 
 def say(message):
@@ -164,6 +166,24 @@ def process_snapshot():
         say("No matching Wine/Box64/Xvfb processes visible")
 
 
+def capture_game_screen(env, mark):
+    if not CAPTURE_SCRIPT.is_file():
+        say("Screenshot helper missing; run update")
+        return
+    output = ROOT / f"game-screen-{mark}s.png"
+    try:
+        result = subprocess.run(
+            [sys.executable, "-u", str(CAPTURE_SCRIPT), str(output)],
+            cwd=ROOT, env=env, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, timeout=15, check=False,
+        )
+        say(result.stdout.strip()[-1400:])
+        if result.returncode:
+            say(f"Screenshot at {mark}s failed (exit {result.returncode}); continuing game test")
+    except (OSError, subprocess.TimeoutExpired) as error:
+        say(f"Screenshot at {mark}s unavailable: {error}")
+
+
 def main():
     validate_setup()
     RUNTIME.mkdir(parents=True, exist_ok=True)
@@ -186,6 +206,8 @@ def main():
     peak_memory = 0
     started = time.monotonic()
     next_snapshot = 12
+    pending_captures = [25, 75]
+    say("Saving screenshots at ~25s and ~75s in /home/container/game-screen-*.png")
     try:
         with xvfb_log.open("w", encoding="utf-8") as stream:
             xvfb = subprocess.Popen([
@@ -220,6 +242,8 @@ def main():
         while True:
             now = time.monotonic()
             elapsed = now - started
+            if pending_captures and elapsed >= pending_captures[0]:
+                capture_game_screen(wenv, pending_captures.pop(0))
             if elapsed >= next_snapshot:
                 process_snapshot()
                 next_snapshot += 30
@@ -256,6 +280,7 @@ def main():
         say(f"Wine log: {WINE_LOG}")
         say(f"Xvfb log: {xvfb_log}")
         say(f"Unity player log (explicit Windows Z: path): {UNITY_LOG}")
+        say("Screenshots: /home/container/game-screen-25s.png and game-screen-75s.png (if captured)")
         say("--- Wine log tail ---")
         tail_file(WINE_LOG, 30)
         say("--- Unity Player.log tail ---")
