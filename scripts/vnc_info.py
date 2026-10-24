@@ -36,13 +36,18 @@ def main():
     session = load(SESSION)
     settings = load(SETTINGS)
     active = running(session.get("game_pid")) and running(session.get("vnc_pid"))
-    port = session.get("vnc_port") if active else settings.get("port", "24663")
+    altare = os.uname().machine.lower() in ("x86_64", "amd64")
+    port_fallback = os.environ.get("SERVER_PORT", "5900") if altare else "24663"
+    port = session.get("vnc_port") if active else settings.get("port", port_fallback)
     public = bool(session.get("vnc_public")) if active else bool(settings.get("public"))
-    host = os.environ.get("VNC_HOST") or settings.get("host") or "vicky.hidencloud.com"
+    host = (os.environ.get("VNC_HOST") or settings.get("host") or
+            ("<Altare Network hostname>" if altare else "vicky.hidencloud.com"))
     print("TGLL: " + ("RUNNING" if active else "STOPPED"))
     print("VNC: " + ("RUNNING" if active else "STOPPED"))
     print(f"VNC port: {port} | {'public' if public else 'localhost only'}")
     print(f"TigerVNC connection: {host}::{port}")
+    if altare and host == "<Altare Network hostname>":
+        print("Use the actual TCP address shown in Altare Network; this placeholder is not a hostname")
     if LOCAL_CREDENTIAL.is_file() and LOCAL_CREDENTIAL.stat().st_mode & 0o077 == 0:
         print("VNC password: " + LOCAL_CREDENTIAL.read_text(encoding="utf-8").strip())
     else:
