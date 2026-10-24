@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.7"
+VERSION = "2026.10.24.8"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 COMMAND_FILE = ROOT / ".tgll-command"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -98,6 +98,8 @@ def status():
     say(f"Wine64: {wine if wine.is_file() else 'not installed'}")
     compat_lib = RUNTIME / "x86_64-libs" / "libgcc_s.so.1"
     say(f"amd64 libgcc: {compat_lib if compat_lib.is_file() else 'not installed'}")
+    display = RUNTIME / "display" / "usr" / "bin" / "Xvfb"
+    say(f"Xvfb local: {display if display.is_file() else 'not installed'}")
     job = job_info()
     if job:
         say(f"Job: {job.get('name')} PID {job.get('pid')} {'running' if job['running'] else 'stopped'}")
@@ -306,7 +308,7 @@ def handle(line):
     cmd = cmd.lower()
     if cmd in ("help", "?"):
         say("Commands: help | status | update | restart | install-box64 | install-wine | wine-diagnose | wine-version")
-        say("          job | logs [N]")
+        say("          install-display | job | logs [N]")
         say("          bash [command] | bash (enter shell mode) | job-stop | stop")
         say("Use bash <command> for one command. In bash mode use 'exit' to return.")
         say("Tip: .tgll-command file also works if panel console input is unavailable.")
@@ -322,6 +324,8 @@ def handle(line):
         launch_job("wine-setup", ROOT / "scripts" / "install_wine.py")
     elif cmd == "wine-diagnose":
         launch_job("wine-diagnose", ROOT / "scripts" / "install_wine.py", ("--diagnose",))
+    elif cmd == "install-display":
+        launch_job("display-setup", ROOT / "scripts" / "install_display.py")
     elif cmd == "wine-version":
         box64 = RUNTIME / "box64" / "bin" / "box64"
         wine = RUNTIME / "wine" / "bin" / "wine"
