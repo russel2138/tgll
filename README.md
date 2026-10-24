@@ -61,6 +61,11 @@ Từ bản v2026.10.24.4, launcher lấy SHA của commit mới nhất qua GitHu
 | `wine-version` | Kiểm tra Wine chạy được qua Box64 hay không |
 | `install-display` | Tải Xvfb ARM64 và thư viện hỗ trợ (Debian, SHA256), thử X11 headless không cần root |
 | `test-graphics` | Mở Xvfb tạm, thử GLX và OpenGL CPU renderer (Mesa/llvmpipe) |
+| `install-vnc` | Cài x11vnc ARM64 và thư viện riêng không cần root |
+| `vnc-password` | Tạo mật khẩu VNC ngẫu nhiên, hiển thị một lần trong Console |
+| `vnc-public` | Điều khiển VNC local/public và cổng TCP |
+| `game-start`, `game-stop`, `game-restart` | Quản lý phiên treo dài hạn |
+| `game-status`, `mem`, `game-screenshot` | Trạng thái/RAM và ảnh màn hình đang chạy |
 | `install-graphics-libs` | Cài riêng các thư viện X11/EGL ARM64 đang thiếu cho Box64 + Wine, không cần root |
 | `game-install` | Giải nén ZIP TGLL đã upload vào thư mục game, không sửa EXE |
 | `test-game` | Thử khởi chạy TGLL tối đa 120 giây bằng Wine + Box64 + Xvfb, lưu log/CPU/RAM |
@@ -226,6 +231,68 @@ Bài test vẫn tối đa 120 giây, không đăng nhập tự động, nhưng s
 Bạn có thể tải hoặc mở hai file này trong panel để xem game đã hiển thị đúng hay đang bị màn hình đen/treo. Nếu có thông tin đăng nhập trên màn hình, không chia sẻ công khai ảnh. Screenshot dùng `libX11.so.6` và Python stdlib, không cần Pillow, VNC hay cài thêm package. Không mở port mạng và không giữ background service
 
 Ảnh chỉ xác nhận nội dung màn hình ảo tại thời điểm chụp, không đảm bảo game nhận thao tác hoặc kết nối máy chủ. Với mức RAM gần chạm cgroup cap 3.3 GiB, ưu tiên kiểm tra hình ảnh trước khi dựng VNC thường trực
+
+## Treo game VPS với VNC (bản 2026.10.24.14)
+
+Sau khi `test-game` đã chạy được giao diện TGLL, dùng launcher để chuyển sang **chế độ treo không giới hạn 120 giây**, quản lý game và x11vnc. VNC chia sẻ chính Xvfb game đang render. Không cài desktop GNOME/KDE, không chạy thêm GPU giả lập
+
+### Cài x11vnc và tạo mật khẩu
+
+Chạy lần lượt trong Console HidenCloud:
+
+```text
+update
+install-vnc
+logs 100
+vnc-password
+```
+
+`install-vnc` cài `x11vnc` cùng các thư viện native ARM64 Debian Bookworm vào `.tgll-runtime/vnc/native` mà không cần quyền root. Từng .deb đều được xác minh SHA256 từ index Debian. Nếu thiếu dependency, `logs 100` hiển thị rõ dòng `MISSING:`, không báo cài thành công giả
+
+`vnc-password` sinh mật khẩu VNC 8 ký tự ngẫu nhiên và hiển thị **một lần trong Console**. Lưu mật khẩu riêng, đừng đưa lên GitHub. File auth lưu `.tgll-runtime/vnc/passwd` quyền 0600. VNC cổ điển chỉ dùng 8 ký tự mật khẩu và không mã hóa toàn bộ traffic, nên ưu tiên tunnel hoặc mạng riêng. Nếu tạo mật khẩu mới trong lúc game chạy, cần `game-restart` để có hiệu lực
+
+### Mở cổng cho TigerVNC trên Mac
+
+Mặc định VNC chỉ lắng nghe `127.0.0.1` để tránh public ngoài ý muốn. Để kết nối từ Mac qua cổng TCP được **HidenCloud cấp cho container**, bật chế độ public và đặt đúng port đã được cấp:
+
+```text
+vnc-public on <PORT_DUOC_CAP>
+```
+
+Ví dụ, nếu panel cấp cổng TCP 25565, nhập `vnc-public on 25565`. Không được lấy nhầm port từ VPS khác. `vnc-public off` chuyển lại localhost trong lần `game-restart` tiếp theo. Nếu không đặt port, launcher thử `VNC_PORT`, `SERVER_PORT`, `PORT` từ môi trường, rồi đến 5900. HidenCloud phải route/expose cổng đó thì người ngoài mới kết nối được. Nếu hosting chặn inbound TCP hoặc chỉ hỗ trợ một protocol khác, không thể truy cập chỉ bằng cách chạy x11vnc
+
+**Cảnh báo an toàn:** VNC public kiểu này được bảo vệ bởi mật khẩu nhưng **không mã hóa phiên truyền**. Dùng SSH tunnel/private network hoặc SSL VNC khi có thể, không nhập tài khoản nhạy cảm trên kết nối không tin cậy
+
+Mở TigerVNC Viewer trên Mac và kết nối bằng địa chỉ, cổng do HidenCloud cấp theo cú pháp `hostname::port` (hai dấu hai chấm để chỉ TCP port tuyệt đối), rồi nhập mật khẩu vừa tạo
+
+### Quản lý phiên treo
+
+```text
+game-start
+game-status
+mem
+game-screenshot
+game-stop
+game-restart
+logs 100
+```
+
+- `game-start`: chạy màn hình ảo Xvfb 640×480, VNC và TGLL qua Box64/Wine; **không có thời hạn tự tắt 120 giây**
+- `game-stop`: dừng riêng game và tiến trình phụ trợ, giữ nguyên Wine prefix và dữ liệu đăng nhập
+- `game-restart`: dừng gọn rồi chạy lại, không tải lại game
+- `game-status`: PID game, display, VNC port và trạng thái RAM hiện tại
+- `mem`: phân biệt RAM `anon`, `file`, `inactive_file` và ước lượng working set; `memory.current` bao gồm cả cache trang có thể thu hồi
+- `game-screenshot`: chụp hình màn hình game đang chạy vào `/home/container/game-screen-live.png`
+- `logs 100`: hiển thị log supervisor, đo RAM mỗi ~30 giây
+- Log bổ sung nằm trong `.tgll-runtime/game-live-wine.log`, `game-live-xvfb.log`, `game-live-vnc.log` và `game-live-Player.log`
+
+### RAM và an toàn khi treo lâu dài
+
+Lần thử thực tế trước khi có VNC ghi nhận **RAM cgroup đạt ~3258 MiB trên giới hạn 3379 MiB** và CPU trung bình ~0,36 core. Đây là số đo cho cả container, không phải riêng game. Bộ nhớ `file` có thể gồm page cache và còn có khả năng thu hồi, còn `anon` là RAM tiến trình khó thu hồi hơn
+
+Bản treo hiện giảm chi phí phụ trợ bằng cách tắt Wine/Box64 debug log, không tạo desktop environment, không bật x11vnc `-ncache` và dùng chung Xvfb hiện có. `GAME_WIDTH`/`GAME_HEIGHT` có thể hạ từ mặc định 640×480 nếu màn hình chấp nhận, ví dụ 480×360 để giảm số pixel render. Nếu đặt `GAME_UNITY_LOG=0`, Unity sẽ dùng đối số `-nolog` nhằm giảm ghi log liên tục, đánh đổi khả năng chẩn đoán
+
+**Chưa xác nhận có thể treo 24/24 trong 3,3 GiB RAM**. VNC và việc đăng nhập có thể làm mức sử dụng tăng. Theo dõi `game-status`, `mem` và `memory.events`; nếu bộ nhớ anon/working set cao sát giới hạn hoặc xuất hiện OOM, nên nâng RAM lên ít nhất 4 GiB thay vì tùy tiện đổi driver đồ họa đã chạy thành công
 
 ## Dữ liệu và cập nhật
 
