@@ -282,6 +282,10 @@ def env_for_display():
         + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else [])
     )
     env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+    xdg = PREFIX / "xdg-runtime"
+    xdg.mkdir(parents=True, exist_ok=True, mode=0o700)
+    xdg.chmod(0o700)
+    env["XDG_RUNTIME_DIR"] = str(xdg)
     env["LD_PRELOAD"] = str(SHIM) + ((":" + env["LD_PRELOAD"]) if env.get("LD_PRELOAD") else "")
     env["TGLL_XKBCOMP_PATH"] = str(XKBCOMP)
     return env
@@ -292,18 +296,19 @@ def check_dependencies(env):
     if not ldd:
         log("ldd not installed; checking Xvfb directly")
         return
-    result = subprocess.run([ldd, str(BIN)], env=env, capture_output=True,
-                            text=True, timeout=20, check=False)
-    output = result.stdout + result.stderr
-    missing = [line.strip() for line in output.splitlines() if "not found" in line]
-    if missing:
-        log("Missing ARM64 Xvfb libraries:")
-        for line in missing:
-            log("  " + line)
-        raise RuntimeError("Xvfb has missing ARM64 dependencies; see lines above")
-    if result.returncode:
-        raise RuntimeError("ldd could not inspect Xvfb: " + output[-1200:])
-    log("Xvfb dynamic library dependency check passed")
+    for binary in (BIN, XKBCOMP):
+        result = subprocess.run([ldd, str(binary)], env=env, capture_output=True,
+                                text=True, timeout=20, check=False)
+        output = result.stdout + result.stderr
+        missing = [line.strip() for line in output.splitlines() if "not found" in line]
+        if missing:
+            log(f"Missing ARM64 libraries for {binary.name}:")
+            for line in missing:
+                log("  " + line)
+            raise RuntimeError(f"{binary.name} has missing ARM64 dependencies")
+        if result.returncode:
+            raise RuntimeError(f"ldd could not inspect {binary.name}: " + output[-1200:])
+    log("Xvfb and xkbcomp ARM64 dynamic library dependency checks passed")
 
 
 def probe_x11(display):
