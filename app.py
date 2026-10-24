@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.20"
+VERSION = "2026.10.24.21"
 ROOT = Path(__file__).resolve().parent
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
@@ -424,7 +424,7 @@ def handle(line):
             say("  Tip: launcher stays online after stopping the game.")
         else:
             say("TGLL / ModDP250 VPS Commands:")
-            say("  start           Start selected game + VNC")
+            say("  start           Start selected game + VNC (1 CPU maximum)")
             say("  stop            Stop game + Wine + VNC (launcher stays online)")
             say("  restart         Restart game + VNC")
             say("  status          Game/VNC status and RAM")
