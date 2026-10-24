@@ -112,6 +112,18 @@ Sau khi log có `SUCCESS: Portable Wine works through Box64`, chạy `update`, `
 
 Phần start/stop display lâu dài, kiểm tra OpenGL và khởi động game sẽ được làm sau khi Xvfb thử nghiệm thành công
 
+### Khắc phục XKB khi Xvfb không có quyền root
+
+Nếu log Xvfb có `sh: 1: /usr/bin/xkbcomp: not found`, `XKB: Failed to compile keymap` hoặc `/tmp/.X11-unix will not be created`, bản launcher **v2026.10.24.9** đã bổ sung:
+
+- Tải riêng `x11-xkb-utils`, `libxkbfile1` và `xkb-data` bản Debian Bookworm, kiểm tra SHA256 từ index gói Debian rồi giải nén vào `.tgll-runtime/display`
+- Biên dịch một thư viện ARM64 nhỏ bằng GCC trong runtime riêng, chỉ chuyển lời gọi shell tới `/usr/bin/xkbcomp` của Xvfb sang binary riêng `.tgll-runtime/display/usr/bin/xkbcomp`. Dùng `LD_PRELOAD` **chỉ cho tiến trình Xvfb**, không thay đổi hệ thống
+- Truyền `-xkbdir` tới thư mục dữ liệu XKB được cài riêng, giữ nguyên màn hình ảo 640×480
+- Chỉ khi thiếu `/tmp/.X11-unix`, thử tạo thư mục với mode `1777` nếu user container có quyền. Nếu thiếu quyền hoặc path không an toàn, báo lỗi cụ thể mà không can thiệp thư mục đã có
+- Giữ lại các gói Xvfb và Wine đã cài. `install-display` chỉ tải thêm thành phần còn thiếu
+
+**Chạy:** `update`, `install-display`, `logs 100`. Cần thấy `SUCCESS: Xvfb ARM64 display ... accepts X11 clients` mới coi là thành công. Chưa xác nhận trên HidenCloud cho tới khi smoke test trả kết quả thành công
+
 ## Dữ liệu và cập nhật
 
 - `app.py`, `main.py`, `scripts/install_box64.py`, `scripts/install_wine.py`, `scripts/install_x86_libs.py`, `scripts/install_display.py`, `README.md` là các file launcher do lệnh update tự cập nhật
