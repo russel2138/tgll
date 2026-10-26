@@ -1,60 +1,95 @@
-# Altare Python Hosting: Java ME / game.jar
+# Altare Python Hosting — Java ME / game.jar
 
-**Separate mode** added to the existing \`russel2138/tgll\` launcher. TGLL and ModDP250 Windows/Wine code, installations, Wine prefixes, and existing configuration remain intact. Source runtime follows \`russel2138/test\`: Temurin Java 17, MicroEmulator 2.0.4, Xvfb, VNC and file-backed RMS.
+Chế độ JAR được thêm riêng vào repo `russel2138/tgll` theo cách chạy MicroEmulator từ `russel2138/test`. Mọi file TGLL, ModDP250, Wine, Wine prefix và VNC cũ được giữ nguyên.
 
-## Quick start
+## Cài đặt lần đầu
 
-Use existing Python Hosting with Startup \`PY_FILE=altare.py\`. No need for a Java hosting egg.
+Trên Altare Python Hosting (startup `PY_FILE=altare.py`), nhập trong Console:
 
-Console:
-
-\`\`\`text
+```text
 stop
 update
 game-select jar
 setup jar
-job
 logs 80
-\`\`\`
+```
 
-\`setup jar\` installs rootless Java 17, MicroEmulator 2.0.4 and a private x86_64 Xvfb/x11vnc display, **without installing Wine**. If missing, it seeds \`/home/container/game.jar\` from the public \`russel2138/test\` repository. Upload your own \`game.jar\` before setup to use a custom J2ME MIDlet. An existing local \`game.jar\` is never overwritten.
+`setup jar` cài Java 17, MicroEmulator 2.0.4, Xvfb và x11vnc rootless, không cần Wine. Nếu thiếu `/home/container/game.jar`, script tải bản mặc định từ repo `russel2138/test`. File game do bạn upload không bị ghi đè.
 
-When \`logs 80\` shows \`SUCCESS: Java ME runtime installed\`:
+Khi đã có `SUCCESS: Java ME runtime installed`, và VNC/port đã cài từ lần chạy TGLL trước, **không cần đổi mật khẩu hay cấu hình lại port**:
 
-\`\`\`text
-vnc-password
-vnc-public on <your-altare-Network-TCP-port>
+```text
 start
 logs 80
 vnc-info
 mem
-\`\`\`
+```
 
-Connect TigerVNC to \`<your-Altare-Network-host>::<port>\`. VNC password auth is not transport encryption; use trusted networks and avoid secrets on publicly exposed VNC. Altare must assign an externally reachable TCP allocation.
+Nếu server mới chưa có VNC, chạy `vnc-password` và `vnc-public on <TCP port từ Altare Network>` một lần. Classic VNC không mã hóa đường truyền.
 
-Use \`stop\` and \`game-select tgll\` to switch back to Windows TGLL; \`game-select moddp250\` is also retained. Do not run both game modes simultaneously through this launcher. Each runtime's files persist independently.
+## Đổi game và emulator
 
-## Resources and state
+Các thư mục upload:
 
-- Java heap defaults \`-Xms8m -Xmx160m -XX:+UseSerialGC\`; can optionally set \`JAR_HEAP_MB=128\` or another value 32..512 in Startup env, then restart. Total RAM includes JVM native overhead, Xvfb, VNC and file cache, not only Java heap
-- Display: \`400x340x16\`; Java ME resizable game area \`400x300\`
-- Saves/RMS: \`/home/container/.tgll-runtime/jar-runtime/state/microemu-home/.microemulator/\` (default \`--rms file\`)
-- Optional \`JAR_RMS_MODE=memory\` in Startup env for nonpersistent RMS only if game supports it; normally keep file
-- Game: \`/home/container/game.jar\`
-- JRE: \`/home/container/.tgll-runtime/jar-runtime/java17\`
-- MicroEmulator: \`/home/container/.tgll-runtime/jar-runtime/microemu\`
-- Java log: \`/home/container/.tgll-runtime/jar-game.log\`
-- Old Wine/TGLL game files: **untouched**
+```text
+/home/container/
+├── game.jar                 # Game mặc định từ repo test
+├── games/
+│   ├── AUTO50_X1.jar
+│   └── V9_X1.jar
+└── emulators/
+    ├── MICRO_NST.jar
+    └── MICRO_ABC.jar
+```
 
-## Troubleshooting
+Emulator phải tương thích MicroEmulator và chứa class `org.microemu.app.Main`. Không dùng một JAR bất kỳ làm emulator.
 
-\`\`\`text
-status
-logs 100
-bash tail -n 70 .tgll-runtime/jar-game.log
-mem
-\`\`\`
+Để liệt kê lựa chọn và xem cặp đang chọn:
 
-If the Java setup fails, supply the last 80 log lines. Older \`game.jar\` not containing \`META-INF/MANIFEST.MF\` with \`MIDlet-1\` is not a J2ME MIDlet and cannot be run with this emulator.
+```text
+list
+```
 
-**Compatibility**: prepared for Altare Python x86_64 and not yet live-tested in the user's container. Provider terms and CPU limits still apply.
+Đổi emulator và game **đồng thời, có restart** như repo `test`:
+
+```text
+restart MICRO_NST AUTO50_X1.jar
+```
+
+Hoặc chỉ đổi game, dùng emulator mặc định:
+
+```text
+restart stock V9_X1.jar
+```
+
+Chỉ đổi emulator, dùng game `game.jar`:
+
+```text
+restart MICRO_NST game.jar
+```
+
+Muốn chọn trước mà chưa mở game:
+
+```text
+stop
+jar-select MICRO_NST AUTO50_X1.jar
+start
+```
+
+`restart` không đối số dùng lại cặp đã lưu. Có thể nhập tên không có `.jar` nếu không trùng tên. Launcher kiểm tra file JAR và `MIDlet-1` của game trước khi lưu lựa chọn.
+
+**Không cần gọi lại `setup jar`, `vnc-password` hay `vnc-public` khi chỉ đổi cặp emulator/game.**
+
+## Dữ liệu và mức RAM
+
+- Java heap mặc định `-Xms8m -Xmx160m -XX:+UseSerialGC`, có thể đặt `JAR_HEAP_MB=128` ở Startup và restart nếu cần
+- Màn hình VNC 400×340×16, thiết bị MicroEmulator 400×300
+- Cặp mặc định `stock + game.jar` vẫn dùng RMS tại `.tgll-runtime/jar-runtime/state/microemu-home/` để không mất dữ liệu cũ
+- Cặp khác lưu riêng RMS tại `.tgll-runtime/jar-runtime/state/profiles/<game>/<emulator>/microemu-home/`
+- Mặc định `--rms file` để lưu tiến trình, không xóa khi chuyển game
+- Java log: `.tgll-runtime/jar-game.log`
+- Lệnh kiểm tra: `status`, `logs 100`, `mem`
+
+Chuyển về TGLL Windows vẫn dùng `stop`, `game-select tgll`, `start`. Không được chạy hai phiên game cùng một port VNC.
+
+Runtime này đã được commit nhưng tính tương thích của từng emulator JAR do người dùng upload cần kiểm chứng bằng log và VNC trên Altare.
