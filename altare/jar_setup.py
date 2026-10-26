@@ -70,8 +70,7 @@ def safe_extract_tar(archive, destination):
         if len(members) > 12000 or sum(x.size for x in members if x.isfile()) > 420 * 1024 * 1024:
             raise RuntimeError("JRE archive has unexpected size")
         for x in members:
-            if (x.name.startswith("/") or ".." in Path(x.name).parts
-                or x.issym() or x.islnk() or x.isdev()):
+            if (x.name.startswith("/") or ".." in Path(x.name).parts or x.isdev()):
                 raise RuntimeError("Unsafe path/link in Java archive: " + x.name)
         tf.extractall(destination, filter="data")
 
@@ -152,6 +151,9 @@ def install_microemu():
         matches = [p for p in stage.rglob("microemulator.jar") if p.is_file()]
         if len(matches) != 1 or not zipfile.is_zipfile(matches[0]):
             raise RuntimeError("MicroEmulator main jar missing/invalid")
+        with zipfile.ZipFile(matches[0]) as mainjar:
+            if "org/microemu/app/Main.class" not in mainjar.namelist():
+                raise RuntimeError("Downloaded MicroEmulator lacks expected main class")
         if MICROEMU.exists():
             shutil.rmtree(MICROEMU)
         shutil.move(str(matches[0].parent), str(MICROEMU))
