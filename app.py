@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.24.23"
+VERSION = "2026.10.26.1"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -371,6 +371,16 @@ def vnc_options(line):
     say("Mode takes effect the next time game-start or game-restart runs")
 
 
+def selected_runner():
+    from scripts.game_profiles import selected_key
+    if selected_key() == "jar":
+        if not IS_ALTARE_AMD64:
+            raise ValueError("Java ME JAR mode is only configured for Altare x86_64")
+        return ROOT / "altare" / "jar_run.py"
+    return (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
+            else ROOT / "scripts" / "run_game.py")
+
+
 def stop_live_game():
     info = job_info()
     if not info or not info["running"]:
@@ -448,23 +458,24 @@ def handle(line):
     if cmd in ("help", "?"):
         if arg.strip().lower() in ("advanced", "setup"):
             say("Maintenance (not needed for daily VPS use):")
-            say("  setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
+            say("  setup [native|jar|game|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
             say("  launcher-status | launcher-restart | job | job-stop")
             say("  game-screenshot | bash [command] | bash | quit")
             say("  Tip: launcher stays online after stopping the game.")
         else:
-            say("TGLL / ModDP250 VPS Commands:")
-            say("  start           Start selected game + VNC (1 CPU maximum)")
-            say("  stop            Stop game + Wine + VNC (launcher stays online)")
+            say("TGLL / ModDP250 / Java ME JAR VPS Commands:")
+            say("  start           Start selected game + VNC")
+            say("  stop            Stop game + VNC (launcher stays online)")
             say("  restart         Restart game + VNC")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
-            say("  game-select moddp250|tgll   Switch game (stop first)")
+            say("  game-select jar|tgll|moddp250   Switch game (stop first)")
             say("  resolution 800x600 | 960x720   Set internal game resolution")
             say("  vnc-scale on|off   Fit full game into 640x480 VNC view")
-            say("  setup game      Unpack uploaded selected game archive")
+            say("  setup game      Install selected game (ZIP or JAR)")
             if IS_ALTARE_AMD64:
                 say("  setup native    Install Altare amd64 Wine + Xvfb + VNC (no Box64)")
+                say("  setup jar       Install Java 17 + MicroEmulator + display (no Wine)")
             say("  vnc-password    Set new VNC password")
             say("  vnc-public on|off [port]   Remote access settings")
             say("  mem | logs [N] | update | game-autostart on|off")
@@ -481,9 +492,9 @@ def handle(line):
         if not choice:
             current = selected_key()
             say(f"Selected game: {current} ({PROFILES[current]['name']})")
-            say("Use: game-select moddp250 | game-select tgll")
+            say("Use: game-select jar | game-select tgll | game-select moddp250")
         elif choice not in PROFILES:
-            say("Use: game-select moddp250 | game-select tgll")
+            say("Use: game-select jar | game-select tgll | game-select moddp250")
         elif (job_info() or {}).get("running"):
             say("Stop the active game/job before switching: stop or job-stop")
         else:
@@ -495,12 +506,15 @@ def handle(line):
                 temp.replace(SELECTION_FILE)
             finally:
                 temp.unlink(missing_ok=True)
-            say(f"Selected {PROFILES[choice]['name']}; run 'setup game' if needed, then 'start'")
+            say(f"Selected {PROFILES[choice]['name']}; run 'setup jar' for Java ME or 'setup game' for Windows, then 'start'")
     elif cmd == "resolution":
         from scripts.game_profiles import selected_key
         game_key = selected_key()
         cfg_path = RUNTIME / "game-resolutions.json"
         defaults = {"moddp250": [800, 600], "tgll": [640, 480]}
+        if game_key == "jar":
+            say("Java ME display is fixed at 400x340 (game 400x300); resolution is for Windows games only")
+            return
         try:
             config = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.is_file() else {}
         except (OSError, ValueError):
@@ -571,11 +585,17 @@ def handle(line):
             "test-graphics": ("graphics-test", "test_graphics.py", ()),
             "wine-diagnose": ("wine-diagnose", "install_wine.py", ("--diagnose",)),
             "native": ("altare-native-setup", "native_setup.py", ()),
+            "jar": ("altare-jar-setup", "jar_setup.py", ()),
         }
         if action not in jobs:
             say("Usage: setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
         else:
-            if action == "native":
+            if action == "jar" or (action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "jar"):
+                if not IS_ALTARE_AMD64:
+                    say("Java ME mode requires Altare x86_64")
+                    return
+                launch_job("altare-jar-setup", ROOT / "altare" / "jar_setup.py")
+            elif action == "native":
                 if not IS_ALTARE_AMD64:
                     say("setup native only supports Linux x86_64")
                     return
@@ -642,16 +662,12 @@ def handle(line):
                 say("Game starts automatically after next HidenCloud/launcher restart; "
                     "use game-start to launch immediately")
     elif cmd == "game-start":
-        launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
-                    else ROOT / "scripts" / "run_game.py")
-        launch_job("game-live", launcher)
+        launch_job("game-live", selected_runner())
     elif cmd == "game-stop":
         stop_live_game()
     elif cmd == "game-restart":
         if stop_live_game():
-            launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
-                        else ROOT / "scripts" / "run_game.py")
-            launch_job("game-live", launcher)
+            launch_job("game-live", selected_runner())
     elif cmd == "mem":
         private_memory_stats()
     elif cmd == "game-status":
@@ -726,9 +742,7 @@ def main():
         try:
             if bool(json.loads(auto.read_text(encoding="utf-8")).get("enabled")):
                 say("Autostart enabled: launching selected game VPS session")
-                launcher = (ROOT / "altare" / "native_run.py" if IS_ALTARE_AMD64
-                            else ROOT / "scripts" / "run_game.py")
-                launch_job("game-live", launcher)
+                launch_job("game-live", selected_runner())
         except (OSError, ValueError) as error:
             say(f"Game autostart config error: {error}")
     while not STOPPING:
