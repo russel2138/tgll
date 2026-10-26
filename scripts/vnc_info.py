@@ -42,7 +42,14 @@ def main():
     public = bool(session.get("vnc_public")) if active else bool(settings.get("public"))
     host = (os.environ.get("VNC_HOST") or settings.get("host") or
             ("<Altare Network hostname>" if altare else "vicky.hidencloud.com"))
-    print("TGLL: " + ("RUNNING" if active else "STOPPED"))
+    game = session.get("game") if active else None
+    if not game:
+        try:
+            from game_profiles import selected_key, PROFILES
+            game = PROFILES[selected_key()]["name"]
+        except (ValueError, KeyError, OSError):
+            game = "TGLL"
+    print(str(game) + ": " + ("RUNNING" if active else "STOPPED"))
     print("VNC: " + ("RUNNING" if active else "STOPPED"))
     print(f"VNC port: {port} | {'public' if public else 'localhost only'}")
     print(f"TigerVNC connection: {host}::{port}")
