@@ -50,13 +50,13 @@ def prepare_tiger():
         temp.unlink(missing_ok=True)
 
     data = ORIGINAL.read_bytes()
-    # Do not globally rewrite /usr/bin references in ELF: only relocate the
-    # xkbcomp invocation string, preserving binary length and other paths.
-    old, new = b"/usr/bin/xkbcomp", b"/tmp/xxx/xkbcomp"
-    if len(old) != len(new):
-        raise RuntimeError("Unexpected xkbcomp path lengths")
-    if old in data:
-        data = data.replace(old, new)
+    # Match the working Raven/Zampto relocation: Xtigervnc may assemble
+    # its xkbcomp command from a /usr/bin string plus the executable name.
+    # Both prefixes are 8 bytes, so ELF offsets and lengths do not change.
+    old, new = b"/usr/bin", b"/tmp/xxx"
+    if old not in data or len(old) != len(new):
+        raise RuntimeError("Unexpected TigerVNC XKB command path; cannot patch safely")
+    data = data.replace(old, new)
 
     if TIGER.is_file() and TIGER.read_bytes() == data:
         pass
