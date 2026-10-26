@@ -15,6 +15,7 @@ from native_setup import (ROOT, RUNTIME, BIN_XVFB, BIN_VNC, XKB_DATA, PASSWD,
                           SHIM, environment)
 from jar_setup import (JRE, STATE)
 from jar_selection import load, resolve
+from jar_tigervnc import TIGER
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import selected_key
 
@@ -78,6 +79,54 @@ def wait_for_vnc(port, p, logfile):
             time.sleep(0.2)
     raise RuntimeError("VNC port unavailable: " + logfile.read_text(errors="replace")[-1800:])
 
+def start_display(display, port, public):
+    """Run TigerVNC like Zampto/Ezonic, with old x11vnc as fallback."""
+    backend = os.environ.get("JAR_VNC_BACKEND", "tigervnc").lower()
+    if backend not in ("tigervnc", "legacy"):
+        raise ValueError("JAR_VNC_BACKEND must be tigervnc or legacy")
+    if backend == "tigervnc" and TIGER.is_file():
+        tiger_log = RUNTIME / "jar-tigervnc.log"
+        log("Starting TigerVNC (direct integrated X11+VNC backend)")
+        try:
+            tiger = spawn("TigerVNC", [
+                str(TIGER), display, "-geometry", "400x340", "-depth", "24",
+                "-rfbport", str(port),
+                "-SecurityTypes", "VncAuth", "-rfbauth", str(PASSWD),
+                "-localhost", "no" if public else "yes",
+                "-AlwaysShared", "-DisconnectClients=0",
+                "-xkbdir", str(XKB_DATA), "-nolisten", "tcp"
+            ], environment(display, for_xvfb=True), tiger_log)
+            wait_for_xvfb(display, tiger, tiger_log)
+            wait_for_vnc(port, tiger, tiger_log)
+            log("TigerVNC listening on port " + str(port))
+            return tiger, tiger, "tigervnc"
+        except (OSError, RuntimeError) as error:
+            log("WARNING: TigerVNC startup failed, falling back to Xvfb+x11vnc: " +
+                str(error)[-1500:])
+            terminate("TigerVNC")
+    elif backend == "tigervnc":
+        log("TigerVNC not installed; run setup jar to enable the faster VNC backend")
+
+    xvfb_log = RUNTIME / "jar-xvfb.log"
+    vnc_log = RUNTIME / "jar-vnc.log"
+    xvfb = spawn("Xvfb", [
+        str(BIN_XVFB), display, "-screen", "0", "400x340x16",
+        "-nolisten", "tcp", "-noreset", "-xkbdir", str(XKB_DATA)
+    ], environment(display, for_xvfb=True), xvfb_log)
+    wait_for_xvfb(display, xvfb, xvfb_log)
+    vnc = spawn("VNC", [
+        str(BIN_VNC), "-norc", "-display", display,
+        "-rfbport", str(port),
+        "-listen", "0.0.0.0" if public else "127.0.0.1",
+        "-no6", "-rfbauth", str(PASSWD),
+        "-forever", "-shared", "-ncache", "0", "-deferupdate", "100",
+        "-nolookup"
+    ], environment(display), vnc_log)
+    wait_for_vnc(port, vnc, vnc_log)
+    log("Legacy x11vnc listening on port " + str(port))
+    return xvfb, vnc, "legacy"
+
+
 def main():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare Java ME runtime requires Linux x86_64")
@@ -128,27 +177,13 @@ def main():
     fonts = RUNTIME / "altare-amd64/root/etc/fonts/fonts.conf"
     if fonts.is_file():
         env_java["FONTCONFIG_FILE"] = str(fonts)
-    xvfb_log = RUNTIME / "jar-xvfb.log"
-    vnc_log = RUNTIME / "jar-vnc.log"
     java_log = RUNTIME / "jar-game.log"
     SESSION.unlink(missing_ok=True)
     log(f"Game: {game_path.name} | Emulator: {selected['emulator']} | MIDlet: {klass}")
     log(f"Heap: {heap} MiB | RMS: {rms} | state: {data}")
-    log(f"Display 400x340x16 | VNC {port} ({'public' if public else 'localhost'})")
+    log(f"Display 400x340 | VNC {port} ({'public' if public else 'localhost'})")
     try:
-        xvfb = spawn("Xvfb", [
-            str(BIN_XVFB), display, "-screen", "0", "400x340x16",
-            "-nolisten", "tcp", "-noreset", "-xkbdir", str(XKB_DATA)],
-            environment(display, for_xvfb=True), xvfb_log)
-        wait_for_xvfb(display, xvfb, xvfb_log)
-        vnc = spawn("VNC", [
-            str(BIN_VNC), "-norc", "-display", display,
-            "-rfbport", str(port),
-            "-listen", "0.0.0.0" if public else "127.0.0.1",
-            "-no6", "-rfbauth", str(PASSWD),
-            "-forever", "-shared", "-ncache", "0", "-deferupdate", "100",
-            "-nolookup"], environment(display), vnc_log)
-        wait_for_vnc(port, vnc, vnc_log)
+        xvfb, vnc, backend = start_display(display, port, public)
         cp = ":".join([
             str(emu_path),
             str(emu_path.parent / "lib" / "*"),
@@ -174,7 +209,7 @@ def main():
             "display": display, "vnc_port": port,
             "vnc_public": public, "game_resolution": "400x300",
             "vnc_resolution": "400x340", "game_pid": game.pid,
-            "vnc_pid": vnc.pid, "xvfb_pid": xvfb.pid,
+            "vnc_pid": vnc.pid, "xvfb_pid": xvfb.pid, "vnc_backend": backend,
             "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         }, indent=2), encoding="utf-8")
         start = time.monotonic()
@@ -193,6 +228,7 @@ def main():
         terminate("Java ME game")
         terminate("VNC")
         terminate("Xvfb")
+        terminate("TigerVNC")
         SESSION.unlink(missing_ok=True)
         log("Java ME stopped; RMS, TGLL and Wine remain untouched")
 
