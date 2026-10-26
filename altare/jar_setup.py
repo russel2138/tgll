@@ -2,7 +2,7 @@
 """Install a rootless Java ME runtime on Altare without touching Wine/TGLL.
 
 Java 17 (Temurin) + MicroEmulator 2.0.4 follow russel2138/test.
-Uses the existing native x86-64 Xvfb/x11vnc installer, but SKIPS Wine.
+Uses the existing native x86-64 package runtime for dependencies and TigerVNC,\nwithout launching Xvfb/x11vnc and without installing Wine.
 """
 from __future__ import annotations
 
@@ -203,16 +203,12 @@ def ensure_display():
         log("Reusing Altare Xvfb/VNC and font runtime")
 
 def ensure_tiger():
-    """Prefer the same integrated TigerVNC backend as Raven/Zampto/Ezonic."""
+    """Install TigerVNC for Java ME or fail clearly. No fallback."""
     from jar_tigervnc import ORIGINAL, EXTRA_PACKAGES, prepare_tiger
-    try:
-        if not ORIGINAL.is_file():
-            log("Installing TigerVNC rootlessly (replacing Xvfb+x11vnc for JAR)")
-            install_packages(extra_packages=EXTRA_PACKAGES)
-        prepare_tiger()
-    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
-        log("WARNING: TigerVNC unavailable: " + str(error)[-2000:])
-        log("Java ME will use the previous Xvfb+x11vnc fallback")
+    if not ORIGINAL.is_file():
+        log("Installing TigerVNC rootlessly (required for Java ME)")
+        install_packages(extra_packages=EXTRA_PACKAGES)
+    prepare_tiger()
 
 
 def main():
@@ -224,7 +220,7 @@ def main():
     install_microemu()
     ensure_game()
     ensure_tiger()
-    log("SUCCESS: Java ME runtime installed; TGLL/Wine files untouched")
+    log("SUCCESS: Java ME + TigerVNC runtime installed; TGLL/Wine files untouched")
     log("Next: start (existing VNC password and TCP port are retained)")
 
 if __name__ == "__main__":
