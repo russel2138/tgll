@@ -202,6 +202,19 @@ def ensure_display():
     else:
         log("Reusing Altare Xvfb/VNC and font runtime")
 
+def ensure_tiger():
+    """Prefer the same integrated TigerVNC backend as Raven/Zampto/Ezonic."""
+    from jar_tigervnc import ORIGINAL, EXTRA_PACKAGES, prepare_tiger
+    try:
+        if not ORIGINAL.is_file():
+            log("Installing TigerVNC rootlessly (replacing Xvfb+x11vnc for JAR)")
+            install_packages(extra_packages=EXTRA_PACKAGES)
+        prepare_tiger()
+    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+        log("WARNING: TigerVNC unavailable: " + str(error)[-2000:])
+        log("Java ME will use the previous Xvfb+x11vnc fallback")
+
+
 def main():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare JAR runtime requires Linux x86_64")
@@ -210,8 +223,9 @@ def main():
     install_java()
     install_microemu()
     ensure_game()
+    ensure_tiger()
     log("SUCCESS: Java ME runtime installed; TGLL/Wine files untouched")
-    log("Next: game-select jar, vnc-password, vnc-public on <Network TCP port>, start")
+    log("Next: start (existing VNC password and TCP port are retained)")
 
 if __name__ == "__main__":
     try:
