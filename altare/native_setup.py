@@ -107,7 +107,7 @@ def environment(display=None, for_xvfb=False):
         env.pop("LD_PRELOAD", None)
     return env
 
-def package_index():
+def package_index(package_names=PACKAGES):
     log("Reading official Debian Bookworm amd64 package index")
     CACHE.mkdir(parents=True, exist_ok=True)
     cache = CACHE / "Packages-amd64.xz"
@@ -121,7 +121,7 @@ def package_index():
     plain = lzma.decompress(data, memlimit=256 * 1024 * 1024)
     if len(plain) > 150 * 1024 * 1024:
         raise RuntimeError("Debian package index expanded too far")
-    desired = set(PACKAGES)
+    desired = set(package_names)
     packages = {}
     for section in plain.decode("utf-8", "replace").split("\n\n"):
         if not section.startswith("Package: "):
@@ -148,16 +148,17 @@ def package_index():
         raise RuntimeError("Debian Bookworm packages unavailable: " + ", ".join(sorted(missing)))
     return packages
 
-def install_packages():
+def install_packages(extra_packages=()):
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare native installer requires Linux x86_64")
     if platform.libc_ver()[1] != "2.36":
         log("WARNING: packages target Debian Bookworm glibc 2.36; verify compatibility")
     if not shutil.which("dpkg-deb"):
         raise RuntimeError("dpkg-deb missing")
-    records = package_index()
+    selected_packages = tuple(dict.fromkeys((*PACKAGES, *extra_packages)))
+    records = package_index(selected_packages)
     PKGROOT.mkdir(parents=True, exist_ok=True)
-    for i, name in enumerate(PACKAGES, 1):
+    for i, name in enumerate(selected_packages, 1):
         fname, digest, size = records[name]
         archive = CACHE / Path(fname).name
         marker = PREFIX / ".installed" / (name + ".json")
@@ -186,7 +187,7 @@ def install_packages():
                 tmp.replace(archive)
             finally:
                 tmp.unlink(missing_ok=True)
-        log(f"[{i}/{len(PACKAGES)}] {name}")
+        log(f"[{i}/{len(selected_packages)}] {name}")
         subprocess.run(["dpkg-deb", "-x", str(archive), str(PKGROOT)],
                        check=True, timeout=90)
         marker.parent.mkdir(parents=True, exist_ok=True)
