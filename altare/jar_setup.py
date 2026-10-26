@@ -185,15 +185,22 @@ def ensure_game():
     return klass
 
 def ensure_display():
-    if not all(path.exists() for path in
-               (BIN_XVFB, BIN_VNC, SHIM, XKB_DATA / "rules/evdev")):
-        log("Installing rootless Xvfb and VNC, keeping Wine/TGLL unchanged")
-        install_packages()
+    from native_setup import PKGROOT
+    font = PKGROOT / "usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    ready = all(path.exists() for path in
+                (BIN_XVFB, BIN_VNC, SHIM, XKB_DATA / "rules/evdev", font))
+    if not ready:
+        log("Preparing Xvfb/VNC and real TrueType fonts (no Wine install)")
+        install_packages(extra_packages=("fontconfig-config", "fonts-dejavu-core",
+                                         "fontconfig", "libharfbuzz0b",
+                                         "libgraphite2-3"))
         compile_shim()
         check_deps()
         smoke_display()
+        if not font.is_file():
+            raise RuntimeError("No font files after extraction")
     else:
-        log("Reusing existing Altare Xvfb/VNC runtime")
+        log("Reusing Altare Xvfb/VNC and font runtime")
 
 def main():
     if platform.machine().lower() not in ("x86_64", "amd64"):
