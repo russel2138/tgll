@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.26.2"
+VERSION = "2026.10.26.3"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
