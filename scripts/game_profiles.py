@@ -17,6 +17,11 @@ PROFILES = {
         "data": "TheGioiLangLa_Data",
         "wineprefix": "wineprefix-test",
     },
+    "jar": {
+        "name": "Java ME (game.jar)",
+        "directory": "jar-game",
+        "jar": "game.jar",
+    },
     "moddp250": {
         "name": "ModDP250",
         "directory": "game-moddp250",
