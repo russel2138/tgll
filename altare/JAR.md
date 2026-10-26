@@ -14,7 +14,7 @@ setup jar
 logs 80
 ```
 
-`setup jar` cài Java 17, MicroEmulator 2.0.4, Xvfb và x11vnc rootless, không cần Wine. Nếu thiếu `/home/container/game.jar`, script tải bản mặc định từ repo `russel2138/test`. File game do bạn upload không bị ghi đè.
+`setup jar` cài Java 17, MicroEmulator 2.0.4 và **TigerVNC (Xtigervnc)** rootless như Zampto/Ezonic, không cần Wine. Chế độ JAR chỉ chạy TigerVNC, **không fallback sang Xvfb+x11vnc**. Nếu thiếu dependency hoặc TigerVNC không khởi động được, launcher báo lỗi và dừng. Nếu thiếu `/home/container/game.jar`, script tải bản mặc định từ repo `russel2138/test`. File game do bạn upload không bị ghi đè.
 
 Khi đã có `SUCCESS: Java ME runtime installed`, và VNC/port đã cài từ lần chạy TGLL trước, **không cần đổi mật khẩu hay cấu hình lại port**:
 
@@ -26,6 +26,21 @@ mem
 ```
 
 Nếu server mới chưa có VNC, chạy `vnc-password` và `vnc-public on <TCP port từ Altare Network>` một lần. Classic VNC không mã hóa đường truyền.
+
+## Nâng cấp server JAR đang chạy
+
+Từ cấu hình x11vnc cũ, nhập:
+
+```text
+stop
+update
+setup jar
+logs 80
+start
+logs 80
+```
+
+Chờ `logs` báo `SUCCESS: Java ME + TigerVNC runtime installed` rồi mới chạy `start`. Mật khẩu VNC, hostname và TCP port Altare trước đó được giữ nguyên. Nếu TigerVNC lỗi, đọc `logs 80` và `bash tail -n 80 .tgll-runtime/jar-tigervnc.log` để xử lý, không tự chạy server VNC khác.
 
 ## Đổi game và emulator
 
