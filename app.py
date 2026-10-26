@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.26.1"
+VERSION = "2026.10.26.2"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -455,6 +455,38 @@ def handle(line):
         "vnc": "vnc-info",
     }
     cmd = aliases.get(cmd, cmd)
+    if cmd in ("list", "jar-list", "jar-select") or (cmd == "game-restart" and arg.strip()):
+        from scripts.game_profiles import selected_key
+        if selected_key() != "jar":
+            say("Java ME selection requires: game-select jar")
+            return
+        jar_path = str(ROOT / "altare")
+        if jar_path not in sys.path:
+            sys.path.insert(0, jar_path)
+        from jar_selection import describe, save, resolve
+        if cmd in ("list", "jar-list"):
+            say(describe())
+            return
+        choices = arg.split()
+        if len(choices) != 2:
+            say("Usage: jar-select <emulator> <game> | restart <emulator> <game>")
+            say("Use 'list' to see uploaded JARs.")
+            return
+        emulator, game = choices
+        if cmd == "jar-select":
+            if (job_info() or {}).get("running"):
+                say("Stop the game before changing selection, or use: restart <emulator> <game>")
+                return
+            chosen = save(emulator, game)
+            say(f"Java ME selected: {chosen['emulator']} + {chosen['game']}. Run start.")
+            return
+        # Validate both JARs before stopping the current session.
+        resolve(emulator, game)
+        if stop_live_game():
+            chosen = save(emulator, game)
+            say(f"Switching to {chosen['emulator']} + {chosen['game']}")
+            launch_job("game-live", selected_runner())
+        return
     if cmd in ("help", "?"):
         if arg.strip().lower() in ("advanced", "setup"):
             say("Maintenance (not needed for daily VPS use):")
@@ -469,7 +501,11 @@ def handle(line):
             say("  restart         Restart game + VNC")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
-            say("  game-select jar|tgll|moddp250   Switch game (stop first)")
+            say("  game-select jar|tgll|moddp250   Switch runtime (stop first)")
+            if IS_ALTARE_AMD64:
+                say("  list            List uploaded Java ME games/emulators")
+                say("  jar-select stock game.jar   Select Java ME pair after stop")
+                say("  restart <emulator> <game>   Switch JAR pair and restart")
             say("  resolution 800x600 | 960x720   Set internal game resolution")
             say("  vnc-scale on|off   Fit full game into 640x480 VNC view")
             say("  setup game      Install selected game (ZIP or JAR)")
