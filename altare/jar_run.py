@@ -152,6 +152,7 @@ def main():
             str(java), "-Xms8m", f"-Xmx{heap}m", "-XX:+UseSerialGC",
             "-Djava.awt.headless=false",
             "-Dsun.java2d.opengl=false",
+            "-Dsun.java2d.fontpath=" + str(RUNTIME / "altare-amd64/root/usr/share/fonts/truetype/dejavu"),
             "-Duser.home=" + str(DATA),
             "-Dswing.defaultlaf=javax.swing.plaf.nimbus.NimbusLookAndFeel",
             "-cp", cp, "org.microemu.app.Main",
