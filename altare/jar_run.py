@@ -13,13 +13,13 @@ import time
 
 from native_setup import (ROOT, RUNTIME, BIN_XVFB, BIN_VNC, XKB_DATA, PASSWD,
                           SHIM, environment)
-from jar_setup import (JRE, MICROEMU, GAME, STATE, parse_midlet)
+from jar_setup import (JRE, STATE)
+from jar_selection import load, resolve
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import selected_key
 
 SESSION = RUNTIME / "game-session.json"
 SETTINGS = RUNTIME / "vnc-settings.json"
-DATA = STATE / "microemu-home"
 STOP = False
 CHILDREN = {}
 
@@ -84,8 +84,13 @@ def main():
     if selected_key() != "jar":
         raise RuntimeError("Select Java ME: game-select jar")
     java = JRE / "bin/java"
-    klass, manifest = parse_midlet(GAME)
-    for path in (java, MICROEMU / "microemulator.jar", BIN_XVFB, BIN_VNC,
+    choice = load()
+    selected = resolve(choice["emulator"], choice["game"])
+    game_path = selected["game_path"]
+    emu_path = selected["emulator_path"]
+    data = selected["home"]
+    klass, manifest = selected["midlet"], selected["manifest"]
+    for path in (java, emu_path, BIN_XVFB, BIN_VNC,
                  XKB_DATA / "rules/evdev", SHIM, PASSWD):
         if not path.is_file():
             raise RuntimeError(f"Missing {path}; run setup jar and vnc-password")
@@ -106,9 +111,9 @@ def main():
     if not display:
         raise RuntimeError("No free X11 display :90..:99")
     STATE.mkdir(parents=True, exist_ok=True)
-    DATA.mkdir(parents=True, exist_ok=True)
-    (DATA / ".microemulator/suite-null").mkdir(parents=True, exist_ok=True)
-    jad = STATE / "game-manifest.jad"
+    data.mkdir(parents=True, exist_ok=True)
+    (data / ".microemulator/suite-null").mkdir(parents=True, exist_ok=True)
+    jad = data.parent / "game-manifest.jad"
     jad.write_text(manifest + "\n", encoding="utf-8")
     heap = int(os.environ.get("JAR_HEAP_MB", "160"))
     if not 32 <= heap <= 512:
@@ -117,7 +122,7 @@ def main():
     if rms not in ("file", "memory"):
         raise RuntimeError("JAR_RMS_MODE must be file or memory")
     env_java = environment(display)
-    env_java["HOME"] = str(DATA)
+    env_java["HOME"] = str(data)
     env_java["JAVA_TOOL_OPTIONS"] = ""
     # Rootless fontconfig can use host config or extracted Debian assets.
     fonts = RUNTIME / "altare-amd64/root/etc/fonts/fonts.conf"
@@ -127,7 +132,8 @@ def main():
     vnc_log = RUNTIME / "jar-vnc.log"
     java_log = RUNTIME / "jar-game.log"
     SESSION.unlink(missing_ok=True)
-    log(f"Game: {GAME} | MIDlet: {klass} | heap: {heap} MiB | RMS: {rms}")
+    log(f"Game: {game_path.name} | Emulator: {selected['emulator']} | MIDlet: {klass}")
+    log(f"Heap: {heap} MiB | RMS: {rms} | state: {data}")
     log(f"Display 400x340x16 | VNC {port} ({'public' if public else 'localhost'})")
     try:
         xvfb = spawn("Xvfb", [
@@ -144,25 +150,28 @@ def main():
             "-nolookup"], environment(display), vnc_log)
         wait_for_vnc(port, vnc, vnc_log)
         cp = ":".join([
-            str(MICROEMU / "microemulator.jar"),
-            str(MICROEMU / "lib" / "*"),
-            str(MICROEMU / "devices" / "*"),
+            str(emu_path),
+            str(emu_path.parent / "lib" / "*"),
+            str(emu_path.parent / "devices" / "*"),
         ])
         java_args = [
             str(java), "-Xms8m", f"-Xmx{heap}m", "-XX:+UseSerialGC",
             "-Djava.awt.headless=false",
             "-Dsun.java2d.opengl=false",
             "-Dsun.java2d.fontpath=" + str(RUNTIME / "altare-amd64/root/usr/share/fonts/truetype/dejavu"),
-            "-Duser.home=" + str(DATA),
+            "-Duser.home=" + str(data),
             "-Dswing.defaultlaf=javax.swing.plaf.nimbus.NimbusLookAndFeel",
             "-cp", cp, "org.microemu.app.Main",
             "--rms", rms, "--resizableDevice", "400", "300",
-            "--appclasspath", str(GAME),
+            "--appclasspath", str(game_path),
             "--propertiesjad", str(jad), "--quit", klass,
         ]
         game = spawn("Java ME game", java_args, env_java, java_log)
         SESSION.write_text(json.dumps({
-            "game": "JAR (Java ME)", "display": display, "vnc_port": port,
+            "game": "JAR (Java ME): " + selected["game"],
+            "jar_emulator": selected["emulator"],
+            "jar_game": selected["game"],
+            "display": display, "vnc_port": port,
             "vnc_public": public, "game_resolution": "400x300",
             "vnc_resolution": "400x340", "game_pid": game.pid,
             "vnc_pid": vnc.pid, "xvfb_pid": xvfb.pid,
