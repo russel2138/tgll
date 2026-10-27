@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.26.4"
+VERSION = "2026.10.28.1"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
