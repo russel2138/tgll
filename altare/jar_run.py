@@ -110,10 +110,13 @@ def main():
     emu_path = selected["emulator_path"]
     data = selected["home"]
     klass, manifest = selected["midlet"], selected["manifest"]
-    for path in (java, emu_path, BIN_XVFB, BIN_VNC,
-                 XKB_DATA / "rules/evdev", SHIM, PASSWD):
+    # Java ME runs TigerVNC directly; Xvfb/x11vnc and their shim are
+    # deliberately not prerequisites (and there is no fallback).
+    for path in (java, emu_path, XKB_DATA / "rules/evdev", PASSWD):
         if not path.is_file():
             raise RuntimeError(f"Missing {path}; run setup jar and vnc-password")
+    if not TIGER.is_file():
+        raise RuntimeError("TigerVNC missing; run setup jar before start (no fallback)")
     if PASSWD.stat().st_mode & 0o077:
         raise RuntimeError("VNC password file must have mode 0600")
     if SETTINGS.is_file():
