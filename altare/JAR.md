@@ -1,6 +1,6 @@
 # Altare Python Hosting — Java ME / game.jar
 
-Chế độ JAR được thêm riêng vào repo `russel2138/tgll` theo cách chạy MicroEmulator từ `russel2138/test`. Mọi file TGLL, ModDP250, Wine, Wine prefix và VNC cũ được giữ nguyên.
+**Nguồn cài đặt JAR hiện nằm tại [`russel2138/test/altare/jar_setup.py`](https://github.com/russel2138/test/blob/main/altare/jar_setup.py)**. Lệnh `setup jar` trong launcher `russel2138/tgll` dùng compatibility bridge để tải và chạy installer từ repo `test` (ưu tiên SHA commit cố định). Cách dùng lệnh không đổi. Mọi file TGLL, ModDP250, Wine, Wine prefix, RMS và cấu hình VNC cũ được giữ nguyên.
 
 ## Cài đặt lần đầu
 
