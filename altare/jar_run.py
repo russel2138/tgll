@@ -14,7 +14,7 @@ import time
 from native_setup import (ROOT, RUNTIME, XKB_DATA, PASSWD, environment)
 from jar_setup import (JRE, STATE)
 from jar_selection import load, resolve
-from jar_tigervnc import TIGER
+from jar_tigervnc import XKB_WRAPPER, prepare_tiger
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import selected_key
 
@@ -80,12 +80,20 @@ def wait_for_vnc(port, p, logfile):
 
 def start_display(display, port, public):
     """Start only TigerVNC, as on Zampto/Ezonic. Never use x11vnc fallback."""
-    if not TIGER.is_file():
-        raise RuntimeError("TigerVNC not installed. Stop the game and run setup jar.")
+    # /tmp is ephemeral on Altare. Setup may have created the relocated
+    # xkbcomp wrapper in a previous container session, so restore it on
+    # EVERY game start before launching the patched Xtigervnc executable.
+    # prepare_tiger() is idempotent, keeps TigerVNC-only, and does not
+    # touch Java, MicroEmulator, RMS, Wine, or VNC credentials.
+    tiger_binary = prepare_tiger()
+    if not XKB_WRAPPER.is_file() or not os.access(XKB_WRAPPER, os.X_OK):
+        raise RuntimeError("TigerVNC xkbcomp wrapper is missing/not executable: "
+                           + str(XKB_WRAPPER))
+    log("TigerVNC xkbcomp wrapper ready: " + str(XKB_WRAPPER))
     tiger_log = RUNTIME / "jar-tigervnc.log"
     log("Starting TigerVNC (integrated X11 + VNC; no fallback)")
     tiger = spawn("TigerVNC", [
-        str(TIGER), display, "-geometry", "400x340", "-depth", "24",
+        str(tiger_binary), display, "-geometry", "400x340", "-depth", "24",
         "-rfbport", str(port),
         "-SecurityTypes", "VncAuth", "-rfbauth", str(PASSWD),
         "-localhost", "no" if public else "yes",
@@ -115,8 +123,8 @@ def main():
     for path in (java, emu_path, XKB_DATA / "rules/evdev", PASSWD):
         if not path.is_file():
             raise RuntimeError(f"Missing {path}; run setup jar and vnc-password")
-    if not TIGER.is_file():
-        raise RuntimeError("TigerVNC missing; run setup jar before start (no fallback)")
+    # start_display() will rebuild the patched TigerVNC executable and its
+    # /tmp xkbcomp helper when dependencies are already installed.
     if PASSWD.stat().st_mode & 0o077:
         raise RuntimeError("VNC password file must have mode 0600")
     if SETTINGS.is_file():
