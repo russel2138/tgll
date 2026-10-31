@@ -22,6 +22,13 @@ PROFILES = {
         "directory": "jar-game",
         "jar": "game.jar",
     },
+    "tiennvo": {
+        "name": "NRO TiennVo",
+        "directory": "game-tiennvo",
+        "exe": "MOD_Tiennvo_249.exe",
+        "data": "MOD_Tiennvo_249_Data",
+        "wineprefix": "wineprefix-tiennvo",
+    },
     "moddp250": {
         "name": "ModDP250",
         "directory": "game-moddp250",

@@ -18,6 +18,12 @@ from game_profiles import ROOT, current_game, selected_key
 MAX_UNPACKED = 400 * 1024 * 1024
 MAX_MEMBERS = 6000
 MAX_MEMBER = 150 * 1024 * 1024
+# The NRO TiennVo game itself is not encrypted. These are QLTK-only addons.
+TIENNVO_QLTK = frozenset({
+    "QLTK.exe", "QLTK.exe.config", "BouncyCastle.Crypto.dll",
+    "Guna.UI2.dll", "Newtonsoft.Json.dll", "RestSharp.dll",
+    "System.CodeDom.dll",
+})
 
 
 def say(message):
@@ -27,6 +33,12 @@ def say(message):
 def source_archive(key):
     if key == "tgll":
         candidates = [ROOT / "TGLL_minCPU_v2.zip", ROOT / "game.zip"]
+    elif key == "tiennvo":
+        candidates = [ROOT / "tiennvo.zip", ROOT / "game-tiennvo.zip"]
+        candidates += sorted(path for path in ROOT.iterdir()
+                             if path.is_file() and path.suffix.lower() == ".zip"
+                             and "tiennvo" in path.name.lower()
+                             and path not in candidates)
     else:
         candidates = [
             ROOT / "ModDP250_game.zip",
@@ -46,9 +58,9 @@ def source_archive(key):
         if candidate.is_file():
             return candidate
     if key == "moddp250":
-        raise FileNotFoundError(
-            "Upload (PC) ModDp250_Setup(1).exe to /home/container, then run setup game"
-        )
+        raise FileNotFoundError("Upload ModDp250 Setup.exe to /home/container, then run setup game")
+    if key == "tiennvo":
+        raise FileNotFoundError("Upload tiennvo.zip or the original TiênnVo ZIP to /home/container")
     raise FileNotFoundError("Upload TGLL_minCPU_v2.zip to /home/container")
 
 
@@ -97,10 +109,18 @@ def main():
     say(f"Installing {game['name']} from {source}")
     with zipfile.ZipFile(source, "r") as archive:
         entries = validate_archive(archive, required)
+        if key == "tiennvo":
+            # Python zipfile cannot extract AES-encrypted QLTK extras, but the
+            # standalone Unity game is unencrypted. Do not unpack any QLTK.
+            encrypted = {entry.filename for entry in entries if entry.flag_bits & 1}
+            if encrypted - TIENNVO_QLTK:
+                raise ValueError("Encrypted non-QLTK member in TiennVo ZIP")
         with tempfile.TemporaryDirectory(prefix=".game-install-", dir=ROOT) as tmp:
             stage = Path(tmp) / "game"
             stage.mkdir()
             for entry in entries:
+                if key == "tiennvo" and entry.filename in TIENNVO_QLTK:
+                    continue
                 dest = stage.joinpath(*PurePosixPath(entry.filename).parts)
                 if entry.is_dir():
                     dest.mkdir(parents=True, exist_ok=True)
