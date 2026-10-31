@@ -10,15 +10,17 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 from native_setup import (
-    ROOT, RUNTIME, BIN_XVFB, BIN_VNC, XKB_DATA, PASSWD, SHIM,
+    ROOT, RUNTIME, PKGROOT, BIN_XVFB, BIN_VNC, XKB_DATA, PASSWD, SHIM,
     environment,
 )
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import current_game, selected_key
+from proxy_launch import check_socks5, proxychains_config
 
 PROFILE = current_game()
 GAME = ROOT / PROFILE["directory"]
@@ -32,6 +34,8 @@ UNITY_LOG = RUNTIME / ("game-live-" + PROFILE["name"] + "-Player.log")
 WINE_LOG = RUNTIME / "game-live-wine.log"
 XVFB_LOG = RUNTIME / "game-live-xvfb.log"
 VNC_LOG = RUNTIME / "game-live-vnc.log"
+PROXYCHAINS = PKGROOT / "usr/bin/proxychains4"
+PROXY_LIBRARY = PKGROOT / "usr/lib/x86_64-linux-gnu/libproxychains.so.4"
 
 STOP = False
 CHILDREN = {}
@@ -120,11 +124,59 @@ def await_vnc(port, p):
     raise RuntimeError("x11vnc didn't open TCP port " + str(port) +
                        "\n" + VNC_LOG.read_text(errors="replace")[-1900:])
 
+def read_proxy_request():
+    if len(sys.argv) == 1:
+        return None
+    if len(sys.argv) != 3 or sys.argv[1] != "--proxy-fd" or not sys.argv[2].isdecimal():
+        raise ValueError("Usage: native_run.py [--proxy-fd inherited-fd]")
+    fd = int(sys.argv[2])
+    try:
+        payload = os.read(fd, 4096)
+        options = json.loads(payload)
+    finally:
+        os.close(fd)
+    if not isinstance(options, dict):
+        raise ValueError("Invalid SOCKS5 options")
+    # Validate/normalize untrusted input, avoiding control characters in config.
+    from proxy_launch import parse_proxy
+    password = options.get("password", "")
+    username = options.get("username", "")
+    return parse_proxy(
+        f"{options['host']}:{options['port']}" +
+        (f":{username}:{password}" if username or password else "")
+    )
+
+
+def prepare_proxy(proxy):
+    # Only install when a SOCKS5 start is requested. Debian packages are
+    # fetched SHA256-verified into the private Altare prefix, no root needed.
+    if not PROXYCHAINS.is_file() or not PROXY_LIBRARY.is_file():
+        from native_setup import install_packages
+        log("Installing rootless Debian proxychains4 + libproxychains4")
+        install_packages(extra_packages=("proxychains4", "libproxychains4"))
+    if not PROXYCHAINS.is_file() or not PROXY_LIBRARY.is_file():
+        raise RuntimeError("ProxyChains installation incomplete; refusing direct fallback")
+    try:
+        check_socks5(proxy)
+    except (OSError, RuntimeError) as error:
+        # Do not log credentials or attempt to start Wine without proxy.
+        raise RuntimeError("SOCKS5 preflight failed: " + str(error)) from error
+    config = proxychains_config(proxy)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                     prefix=".proxychains-", suffix=".conf",
+                                     dir=RUNTIME, delete=False) as stream:
+        stream.write(config)
+        path = Path(stream.name)
+    path.chmod(0o600)
+    log("SOCKS5 handshake successful; proxychains TCP mode enabled")
+    return path
+
+
 def validate():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare native runner is only for Linux x86_64")
-    if selected_key() != "tgll":
-        raise RuntimeError("Select TGLL for Altare native test: game-select tgll")
+    if "exe" not in PROFILE:
+        raise RuntimeError("Select a Windows EXE game profile, not JAR")
     for path in (BIN_XVFB, BIN_VNC, XKB_DATA / "rules/evdev",
                  SHIM, PASSWD, WINE, WINESERVER, EXE,
                  GAME / "UnityPlayer.dll", GAME / "GameAssembly.dll",
@@ -136,16 +188,17 @@ def validate():
         raise RuntimeError("VNC password permissions are not private (expected 0600)")
 
 def main():
+    proxy = read_proxy_request()
     validate()
     settings, port, public = config()
     display = pick_display()
-    default_size = (640, 480)
+    default_size = (400, 340) if selected_key() == "tiennvo" else (640, 480)
     saved_size = RUNTIME / "game-resolutions.json"
     data = json.loads(saved_size.read_text()) if saved_size.is_file() else {}
-    width, height = map(int, data.get("tgll", list(default_size)))
+    width, height = map(int, data.get(selected_key(), list(default_size)))
     if not (320 <= width <= 960 and 240 <= height <= 720):
         raise RuntimeError("Resolution out of supported range")
-    log(f"Native x86_64 Wine (no Box64): TGLL at {width}x{height}")
+    log(f"Native x86_64 Wine (no Box64): {PROFILE['name']} at {width}x{height}")
     log(f"VNC port={port} bind={'0.0.0.0' if public else '127.0.0.1'}")
     if public:
         log("WARNING: VNC password does not encrypt traffic; use private networking if available")
@@ -159,7 +212,10 @@ def main():
     vnc_scale = bool(settings.get("scale", False)) and (width > 640 or height > 480)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.unlink(missing_ok=True)
+    proxy_file = None
     try:
+        if proxy is not None:
+            proxy_file = prepare_proxy(proxy)
         xvfb = child("Xvfb", [
             str(BIN_XVFB), display, "-screen", "0", f"{width}x{height}x24",
             "-nolisten", "tcp", "-noreset", "-xkbdir", str(XKB_DATA)],
@@ -182,16 +238,20 @@ def main():
             args.append("-nolog")
         else:
             args += ["-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\")]
-        game = child("TGLL", args, env_wine, WINE_LOG, cwd=GAME)
+        if proxy_file is not None:
+            args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *args]
+        game = child(PROFILE["name"], args, env_wine, WINE_LOG, cwd=GAME)
         SESSION_FILE.write_text(json.dumps({
             "display": display, "vnc_port": port, "vnc_public": public,
             "game_resolution": f"{width}x{height}",
             "vnc_resolution": "640x480" if vnc_scale else f"{width}x{height}",
             "game": PROFILE["name"], "game_pid": game.pid, "vnc_pid": vnc.pid,
+            "proxy_mode": "socks5" if proxy else "direct",
+            "proxy_host": proxy["host"] if proxy else None,
             "xvfb_pid": xvfb.pid, "cpu_quota": "Altare cgroup (no extra affinity cap)",
             "created": time.strftime("%Y-%m-%d %H:%M:%S"),
         }, indent=2), encoding="utf-8")
-        log("Native TGLL session started; connect to Altare VNC endpoint")
+        log("Native Windows EXE session started; connect to Altare VNC endpoint")
         start = time.monotonic()
         while not STOP:
             if game.poll() is not None:
@@ -205,7 +265,7 @@ def main():
                 log(f"TGLL uptime {int(time.monotonic() - start)}s")
             time.sleep(2)
     finally:
-        log("Stopping TGLL Wine -> wineserver -> VNC -> Xvfb")
+        log("Stopping Wine -> wineserver -> VNC -> Xvfb")
         stop_child("TGLL")
         try:
             subprocess.run([str(WINESERVER), "-k"], env=env_wine, timeout=15,
@@ -215,6 +275,8 @@ def main():
         stop_child("VNC")
         stop_child("Xvfb")
         SESSION_FILE.unlink(missing_ok=True)
+        if proxy_file is not None:
+            proxy_file.unlink(missing_ok=True)
         log("Session stopped; game files and Wine prefix are preserved")
 
 if __name__ == "__main__":
