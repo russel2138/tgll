@@ -18,18 +18,19 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.28.1"
+VERSION = "2026.10.31.1"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
 SHELL_CWD = ROOT
 CURRENT_JOB = None
 STOPPING = False
+ACTIVE_PROXY = None  # Memory only; never stored in job.json or on disk.
 
 
 def say(message=""):
@@ -267,14 +268,14 @@ def run_bash(command, cwd=None):
         say(f"[bash] {error}")
 
 
-def launch_job(name, script, args=()):
+def launch_job(name, script, args=(), pass_fds=()):
     job = job_info()
     if job and job["running"]:
         say(f"Another job is running: {job.get('name')} PID {job.get('pid')}")
-        return
+        return None
     if not script.is_file():
         say("Installer missing: run update first")
-        return
+        return None
     RUNTIME.mkdir(parents=True, exist_ok=True)
     log_file = RUNTIME / f"{name}.log"
     try:
@@ -286,6 +287,7 @@ def launch_job(name, script, args=()):
                 stdout=stream,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
+                pass_fds=pass_fds,
             )
         JOB_FILE.write_text(json.dumps({
             "name": name, "pid": proc.pid, "log": str(log_file),
@@ -293,8 +295,10 @@ def launch_job(name, script, args=()):
         }, indent=2), encoding="utf-8")
         say(f"Started {name} PID {proc.pid}")
         say(f"Use 'logs 50' or 'job' to check progress")
+        return proc
     except OSError as error:
         say(f"Could not start {name}: {error}")
+        return None
 
 
 def private_memory_stats():
@@ -381,6 +385,45 @@ def selected_runner():
             else ROOT / "scripts" / "run_game.py")
 
 
+
+def launch_selected_game(proxy_arg="", reuse_previous=False):
+    """Launch Windows EXE direct or with one-shot SOCKS5; JAR stays unchanged."""
+    global ACTIVE_PROXY
+    from scripts.game_profiles import selected_key
+    proxy_text = (ACTIVE_PROXY or "") if reuse_previous and not proxy_arg else proxy_arg.strip()
+    if not proxy_text:
+        proc = launch_job("game-live", selected_runner())
+        if proc:
+            ACTIVE_PROXY = None
+        return
+    if not IS_ALTARE_AMD64 or selected_key() == "jar":
+        say("SOCKS5 inline mode is only for Altare x86_64 Windows EXE games")
+        return
+    from scripts.proxy_launch import parse_proxy
+    try:
+        options = parse_proxy(proxy_text)
+    except ValueError as error:
+        say(f"Invalid SOCKS5 proxy: {error}")
+        return
+    # A pipe is inherited only by the runner: password never appears in ps,
+    # job.json, or a saved launcher configuration file.
+    read_fd, write_fd = os.pipe()
+    try:
+        payload = json.dumps(options, separators=(",", ":")).encode("utf-8")
+        os.write(write_fd, payload)
+        os.close(write_fd)
+        write_fd = -1
+        proc = launch_job("game-live", selected_runner(),
+                          ("--proxy-fd", str(read_fd)), pass_fds=(read_fd,))
+        if proc:
+            ACTIVE_PROXY = proxy_text
+            say("SOCKS5 selected for this session (credentials not logged)")
+    finally:
+        if write_fd >= 0:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
 def stop_live_game():
     info = job_info()
     if not info or not info["running"]:
@@ -455,7 +498,7 @@ def handle(line):
         "vnc": "vnc-info",
     }
     cmd = aliases.get(cmd, cmd)
-    if cmd in ("list", "jar-list", "jar-select") or (cmd == "game-restart" and arg.strip()):
+    if cmd in ("list", "jar-list", "jar-select") or (cmd == "game-restart" and len(arg.split()) == 2 and ":" not in arg):
         from scripts.game_profiles import selected_key
         if selected_key() != "jar":
             say("Java ME selection requires: game-select jar")
@@ -495,13 +538,13 @@ def handle(line):
             say("  game-screenshot | bash [command] | bash | quit")
             say("  Tip: launcher stays online after stopping the game.")
         else:
-            say("TGLL / ModDP250 / Java ME JAR VPS Commands:")
-            say("  start           Start selected game + VNC")
+            say("TGLL / ModDP250 / TiennVo / Java ME JAR VPS Commands:")
+            say("  start [ip:port[:user:pass]]    Direct or SOCKS5 for Windows EXE")
             say("  stop            Stop game + VNC (launcher stays online)")
-            say("  restart         Restart game + VNC")
+            say("  restart [ip:port[:user:pass]]  Reuse current SOCKS5 if omitted")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
-            say("  game-select jar|tgll|moddp250   Switch runtime (stop first)")
+            say("  game-select jar|tgll|moddp250|tiennvo   Switch game (stop first)")
             if IS_ALTARE_AMD64:
                 say("  list            List uploaded Java ME games/emulators")
                 say("  jar-select stock game.jar   Select Java ME pair after stop")
@@ -528,9 +571,9 @@ def handle(line):
         if not choice:
             current = selected_key()
             say(f"Selected game: {current} ({PROFILES[current]['name']})")
-            say("Use: game-select jar | game-select tgll | game-select moddp250")
+            say("Use: game-select jar | tgll | moddp250 | tiennvo")
         elif choice not in PROFILES:
-            say("Use: game-select jar | game-select tgll | game-select moddp250")
+            say("Use: game-select jar | tgll | moddp250 | tiennvo")
         elif (job_info() or {}).get("running"):
             say("Stop the active game/job before switching: stop or job-stop")
         else:
@@ -547,7 +590,7 @@ def handle(line):
         from scripts.game_profiles import selected_key
         game_key = selected_key()
         cfg_path = RUNTIME / "game-resolutions.json"
-        defaults = {"moddp250": [800, 600], "tgll": [640, 480]}
+        defaults = {"moddp250": [800, 600], "tgll": [640, 480], "tiennvo": [400, 340]}
         if game_key == "jar":
             say("Java ME display is fixed at 400x340 (game 400x300); resolution is for Windows games only")
             return
@@ -698,12 +741,12 @@ def handle(line):
                 say("Game starts automatically after next HidenCloud/launcher restart; "
                     "use game-start to launch immediately")
     elif cmd == "game-start":
-        launch_job("game-live", selected_runner())
+        launch_selected_game(arg)
     elif cmd == "game-stop":
         stop_live_game()
     elif cmd == "game-restart":
         if stop_live_game():
-            launch_job("game-live", selected_runner())
+            launch_selected_game(arg, reuse_previous=True)
     elif cmd == "mem":
         private_memory_stats()
     elif cmd == "game-status":
