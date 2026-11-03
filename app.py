@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.6"
+VERSION = "2026.11.03.7"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/upde_runtime.py", "altare/upde_dotnet.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/upde_runtime.py", "altare/upde_dotnet.py", "altare/upde_fonts.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -557,6 +557,7 @@ def handle(line):
                 say("  game-select upde | setup game    Install new Up Đệ Basic from GitHub ZIP")
                 say("  setup upde-dotnet  Test native Microsoft .NET 4.8 in separate Wine prefix")
                 say("  upde-runtime mono|netfx   Select Up Đệ .NET runtime (stop first)")
+                say("  setup upde-fonts  Repair Vietnamese UI fonts in both Up Đệ Wine prefixes")
                 say("  qltk on|off     QLTK opens TiênnVo game when you click Login")
                 say("  graphics [default|glsl-vkd3d|bitblt|glcore|singlethread]")
                 say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
@@ -677,6 +678,7 @@ def handle(line):
             "qltk": ("altare-qltk-setup", "qltk_setup.py", ()),
             "qltk-fonts": ("altare-qltk-fonts", "qltk_fonts.py", ()),
             "upde-dotnet": ("altare-upde-dotnet", "upde_dotnet.py", ()),
+            "upde-fonts": ("altare-upde-fonts", "upde_fonts.py", ()),
         }
         if action not in jobs:
             say("Usage: setup [native|jar|game|qltk|qltk-fonts|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
@@ -691,6 +693,12 @@ def handle(line):
                     say("Up Đệ Basic requires Altare x86_64")
                     return
                 launch_job("altare-upde-setup", ROOT / "altare" / "upde_setup.py")
+            elif action == "upde-fonts":
+                from scripts.game_profiles import selected_key
+                if not IS_ALTARE_AMD64 or selected_key() != "upde":
+                    say("setup upde-fonts requires game-select upde on Altare x86_64")
+                    return
+                launch_job("altare-upde-fonts", ROOT / "altare" / "upde_fonts.py")
             elif action == "upde-dotnet":
                 from scripts.game_profiles import selected_key
                 if not IS_ALTARE_AMD64 or selected_key() != "upde":
