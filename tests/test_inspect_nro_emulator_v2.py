@@ -50,6 +50,28 @@ def java_manifest(z,item):
         return "nested jar metadata error:"+type(e).__name__
 
 class Inventory(unittest.TestCase):
+    def test_embedded_jar_linux_support(self):
+        with zipfile.ZipFile(ARCHIVE) as outer:
+            exe=outer.read("NRO EMULATOR.exe")
+        with zipfile.ZipFile(io.BytesIO(exe)) as inner:
+            names=inner.namelist()
+            print("EMBEDDED_JAR_COUNT:",len(names),flush=True)
+            print("EMBEDDED_CLASSES:",sum(x.endswith(".class") for x in names),flush=True)
+            print("EMBEDDED_LINUX_LIBS:",[x for x in names if x.endswith(".so")][:70],flush=True)
+            print("EMBEDDED_WINDOWS_LIBS:",[x for x in names if x.endswith(".dll")][:20],flush=True)
+            print("GLFW_CLASS_PRESENT:",any("org/lwjgl/glfw/GLFW.class" in x for x in names),flush=True)
+            print("LWJGL_LIBS:",[x for x in names if any(k in x.lower() for k in (
+                "liblwjgl", "glfw", "libopenal", "libgdx", "libjemalloc", "libstb")) and
+                (x.endswith(".so") or x.endswith(".dylib") or x.endswith(".dll"))][:90],flush=True)
+            print("APP_CLASSES_SAMPLE:",[x for x in names if x.startswith("com/dragonboy/") and x.endswith(".class")][:50],flush=True)
+            main="com/dragonboy/desktop/DesktopLauncher.class"
+            print("MAIN_CLASS_FOUND:",main in names,flush=True)
+            if main in names:
+                b=inner.read(main)
+                print("MAIN_CLASS_MAJOR:",struct.unpack_from(">H",b,6)[0],flush=True)
+            jar_main="META-INF/MANIFEST.MF"
+            print("JAR_MANIFEST:",repr(inner.read(jar_main).decode("utf-8","replace")[:1600]),flush=True)
+
     def test_exe_wrapper_and_bundled_java(self):
         with zipfile.ZipFile(ARCHIVE) as z:
             names=set(z.namelist())
