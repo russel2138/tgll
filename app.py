@@ -891,7 +891,7 @@ def handle(line):
         if option == "on" and not (ROOT / ("game-upde" if selected_key() == "upde" else "game-tiennvo") / "QLTK.exe").is_file():
             say("QLTK not installed; run setup qltk first")
             return
-        if option == "on":
+        if option == "on" and selected_key() == "tiennvo":
             import sys as _sys
             folder = str(ROOT / "altare")
             if folder not in _sys.path:
