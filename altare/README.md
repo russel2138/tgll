@@ -153,7 +153,7 @@ start 1.2.3.4:1080
 start 1.2.3.4:1080:user:pass
 ```
 
-`start` sẽ mở **game Unity + QLTK** trên cùng Wine prefix/display/VNC. Game vẫn dùng 400×340 (trừ khi bạn đổi `resolution`), nhưng desktop VNC mở rộng mặc định lên 1280×800 để nhìn trọn cửa sổ QLTK. SOCKS5 TCP qua ProxyChains được áp dụng cho cả game và QLTK nếu bạn truyền proxy; localhost `127.0.0.1` được giữ local cho giao tiếp giữa hai chương trình.
+`start` khi QLTK đang bật sẽ **chỉ mở QLTK** trên Wine/VNC. QLTK tự mở Unity khi bạn nhấn **Login**, tránh mở game trùng. Khi `qltk off`, `start` mới mở EXE game trực tiếp. Game vẫn dùng 400×340 (trừ khi bạn đổi `resolution`), nhưng desktop VNC mở rộng mặc định lên 1280×800 để nhìn trọn cửa sổ QLTK. SOCKS5 TCP qua ProxyChains được áp dụng cho cả game và QLTK nếu bạn truyền proxy; localhost `127.0.0.1` được giữ local cho giao tiếp giữa hai chương trình.
 
 Có thể tạm không mở QLTK:
 
@@ -224,3 +224,24 @@ start
 ```
 
 Chờ `logs` báo `Wine font substitutions registered for QLTK UI` và `Unicode fonts ready` trước khi `start`. Không cần thay `qltk-display` hoặc `resolution` vì giao diện đã đủ. Chụp lại màn hình VNC nếu lỗi dấu vẫn còn; khi đó nguyên nhân có thể là font đã embed trong Guna UI hoặc cách ứng dụng xử lý glyph riêng, không nên cài thêm các font ngẫu nhiên hay sửa binary EXE vội.
+
+## Sửa cơ chế QLTK mở game khi Login (Altare, bản 2026.11.03.3)
+
+QLTK sở hữu chức năng login, và **tự sinh tiến trình `MOD_Tiennvo_249.exe`** khi người dùng nhấn **Login**. Các bản launcher trước đây chạy game một lần trước QLTK, khiến màn hình có hai phiên game và nhiễu khi chẩn đoán màn hình đen.
+
+Cơ chế sau khi sửa:
+
+- `qltk on` (mặc định sau setup): `start` chỉ mở QLTK + VNC, không khởi động EXE Unity. Sau đó chọn tài khoản và bấm **Login** trong QLTK để game mở lên
+- `qltk off`: `start` mở EXE Unity bình thường, vẫn truyền kích thước game 400×340 (hoặc đã thiết lập)
+- Wine prefix, môi trường X11 và thư mục làm việc được giữ nguyên. QLTK thoát sớm sẽ ghi log, nhưng không tự đóng VNC vì nó có thể đã mở game con. Lệnh `stop` sẽ đóng toàn bộ tiến trình Wine trong prefix TiênnVo
+
+Cập nhật:
+
+```text
+stop
+update
+qltk on
+start
+```
+
+**Bấm Login trong QLTK, không cần tự mở game thứ hai.** Khi cần chẩn đoán màn đen của *game được mở bởi QLTK*, xem log `game-live-qltk.log` và Player.log mà Unity tự ghi trong Wine prefix. Lưu ý tham số `-screen-width`/ `-logFile` chỉ có ở chế độ `qltk off` vì QLTK kiểm soát tham số khi khởi chạy game.
