@@ -17,7 +17,7 @@ import tempfile
 from urllib.request import Request, urlopen
 import zipfile
 
-from native_setup import ROOT, RUNTIME, WINE, BIN_XVFB, install_packages, PKGROOT
+from native_setup import ROOT, RUNTIME, BIN_XVFB, install_packages, PKGROOT
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import PROFILES, selected_key
@@ -27,6 +27,7 @@ from qltk_fonts import FONT_FILES, config_xml
 
 ZIP_NAME = "[TiennVo.Net]Tool Up De Basic.zip"
 SOURCE = ROOT / ZIP_NAME
+WINE = RUNTIME / "wine/bin/wine"
 PINNED_COMMIT = "f45aebcf084676b07333861eda6392b8c01199ab"
 SOURCE_URL = ("https://raw.githubusercontent.com/russel2138/tgll/" +
               PINNED_COMMIT + "/%5BTiennVo.Net%5DTool%20Up%20De%20Basic.zip")
