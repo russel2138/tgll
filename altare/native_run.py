@@ -202,6 +202,11 @@ def desktop_dimensions(game_width: int, game_height: int, with_qltk: bool) -> tu
     return max(width, game_width), max(height, game_height)
 
 
+def startup_owner(game_key: str, manager_enabled: bool) -> str:
+    """QLTK starts Unity on Login; without QLTK launch the Unity EXE directly."""
+    return "qltk" if game_key == "tiennvo" and manager_enabled else "game"
+
+
 def validate():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare native runner is only for Linux x86_64")
@@ -271,28 +276,33 @@ def main():
             vnc_args += ["-scale", "640x480"]
         vnc = child("VNC", vnc_args, environment(display), VNC_LOG)
         await_vnc(port, vnc)
-        args = [str(WINE), str(EXE), "-screen-fullscreen", "0",
-                "-screen-width", str(width), "-screen-height", str(height)]
-        if os.environ.get("GAME_UNITY_LOG") == "0":
-            args.append("-nolog")
-        else:
-            args += ["-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\")]
-        if proxy_file is not None:
-            args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *args]
-        game = child(PROFILE["name"], args, env_wine, WINE_LOG, cwd=GAME)
+        owner = startup_owner(selected_key(), use_qltk)
+        game = None
         qltk = None
-        if use_qltk:
-            # Same Wine prefix, working directory and DISPLAY; supports the
-            # mod's loopback IPC at 127.0.0.1:14445 without changing socket.ini.
+        if owner == "qltk":
+            # QLTK creates Unity on Login. Never pre-launch duplicate Unity.
             qltk_args = [str(WINE), str(GAME / "QLTK.exe")]
             if proxy_file is not None:
                 qltk_args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *qltk_args]
             qltk = child("QLTK", qltk_args, env_wine, QLTK_LOG, cwd=GAME)
+            log("QLTK mode: Login in QLTK starts Unity; no duplicate pre-launch")
+        else:
+            args = [str(WINE), str(EXE), "-screen-fullscreen", "0",
+                    "-screen-width", str(width), "-screen-height", str(height)]
+            if os.environ.get("GAME_UNITY_LOG") == "0":
+                args.append("-nolog")
+            else:
+                args += ["-logFile", "Z:" + str(UNITY_LOG).replace("/", "\\")]
+            if proxy_file is not None:
+                args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *args]
+            game = child(PROFILE["name"], args, env_wine, WINE_LOG, cwd=GAME)
+            log("Direct game mode: launcher starts Unity without QLTK")
         SESSION_FILE.write_text(json.dumps({
             "display": display, "vnc_port": port, "vnc_public": public,
             "game_resolution": f"{width}x{height}",
             "vnc_resolution": "640x480" if vnc_scale else f"{desktop_width}x{desktop_height}",
-            "game": PROFILE["name"], "game_pid": game.pid, "vnc_pid": vnc.pid,
+            "game": PROFILE["name"], "game_pid": game.pid if game else None,
+            "launch_owner": owner, "vnc_pid": vnc.pid,
             "qltk_enabled": use_qltk, "qltk_pid": qltk.pid if qltk else None,
             "display_resolution": f"{desktop_width}x{desktop_height}",
             "proxy_mode": "socks5" if proxy else "direct",
@@ -304,18 +314,19 @@ def main():
         start = time.monotonic()
         qltk_exited = False
         while not STOP:
-            if game.poll() is not None:
+            if game is not None and game.poll() is not None:
                 log(f"Wine process exited with code {game.returncode}")
                 log("Wine log tail:\n" + WINE_LOG.read_text(errors="replace")[-1600:])
                 break
             if qltk is not None and not qltk_exited and qltk.poll() is not None:
                 qltk_exited = True
-                log(f"QLTK exited code {qltk.returncode}; game continues. Check game-live-qltk.log")
+                log(f"QLTK wrapper exited code {qltk.returncode}; keep VNC running "
+                    "for any game spawned by QLTK. Check game-live-qltk.log")
             if xvfb.poll() is not None or vnc.poll() is not None:
                 log("Xvfb or VNC exited; stopping session")
                 break
             if int(time.monotonic() - start) % 30 < 2:
-                log(f"TGLL uptime {int(time.monotonic() - start)}s")
+                log(f"{PROFILE['name']} ({owner}) uptime {int(time.monotonic() - start)}s")
             time.sleep(2)
     finally:
         log("Stopping Wine -> wineserver -> VNC -> Xvfb")
