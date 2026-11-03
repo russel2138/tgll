@@ -838,6 +838,20 @@ def handle(line):
         if option == "on" and not (ROOT / "game-tiennvo/QLTK.exe").is_file():
             say("QLTK not installed; run setup qltk first")
             return
+        if option == "on":
+            import sys as _sys
+            folder = str(ROOT / "altare")
+            if folder not in _sys.path:
+                _sys.path.insert(0, folder)
+            from graphics_modes import read_mode, MANAGER_MODES
+            try:
+                current_mode = read_mode(RUNTIME / "tiennvo-graphics.json")
+            except (OSError, ValueError) as error:
+                say("Cannot enable QLTK: graphics settings invalid: " + str(error))
+                return
+            if current_mode not in MANAGER_MODES:
+                say(f"Cannot enable QLTK with graphics {current_mode}; run graphics default first")
+                return
         RUNTIME.mkdir(parents=True, exist_ok=True)
         tmp = file.with_suffix(".tmp")
         try:
