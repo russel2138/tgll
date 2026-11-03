@@ -50,6 +50,59 @@ def java_manifest(z,item):
         return "nested jar metadata error:"+type(e).__name__
 
 class Inventory(unittest.TestCase):
+    def test_exe_wrapper_and_bundled_java(self):
+        with zipfile.ZipFile(ARCHIVE) as z:
+            names=set(z.namelist())
+            for file in sorted(name for name in names if name.startswith("jre/") and
+                               (name.endswith("/release") or name.endswith("/modules"))):
+                info=z.getinfo(file)
+                if file.endswith("/release") and info.file_size < 2000:
+                    t=z.read(file).decode("utf-8","replace")
+                    print("JRE_RELEASE:",re.sub(r'(?i)password|token|secret',"[redacted]",t[:1400]),flush=True)
+                else:
+                    print("JRE_LIBRARY:",file,info.file_size,flush=True)
+            data=z.read("NRO EMULATOR.exe")
+            print("EXE_BYTES:",len(data),flush=True)
+            print("EXE_PE_PREFIX:",repr(data[:8]),flush=True)
+            markers=[
+                b"PK\x03\x04",b"PK\x05\x06",b"META-INF/MANIFEST.MF",
+                b"javaw.exe",b"java.exe",b"jvm.dll",b"jre\\bin",
+                b"jre/bin",b"JNI_CreateJavaVM",b"Launch4j",b"launch4j",
+                b"exe4j",b"EXE4J",b"Inno Setup",b"NSIS",
+                b"7z\xbc\xaf\x27\x1c",b"graalvm",b"GraalVM",
+                b"org/microemu",b"org/microemu/app/Main",b"Midlet",
+                b"MIDlet",b"JAR",b".jar",b"jpackage",b"Jar2Exe",
+            ]
+            for marker in markers:
+                print("EXE_MARKER",repr(marker),data.find(marker),flush=True)
+            embedded=zipfile.is_zipfile(io.BytesIO(data))
+            print("EXE_VALID_ZIP_CONTAINER:",embedded,flush=True)
+            if embedded:
+                with zipfile.ZipFile(io.BytesIO(data)) as inner:
+                    files=inner.namelist()
+                    print("EXE_INTERNAL_ENTRIES:",len(files),flush=True)
+                    print("EXE_INTERNAL_NAMES:",repr(files[:80]),flush=True)
+                    for manifest_name in ("META-INF/MANIFEST.MF","MANIFEST.MF"):
+                        if manifest_name in files:
+                            b=inner.read(manifest_name).decode("utf-8","replace")
+                            print("EXE_MANIFEST",repr([ln[:170] for ln in b.splitlines()[:25]]),flush=True)
+            # PE overlay = bytes after last physical section; useful for finding
+            # compressed/embedded Java artifacts without running the program.
+            ptr=struct.unpack_from("<I",data,0x3c)[0]
+            num_sections=struct.unpack_from("<H",data,ptr+6)[0]
+            optional_size=struct.unpack_from("<H",data,ptr+20)[0]
+            table=ptr+24+optional_size
+            ends=[]
+            for i in range(min(num_sections,96)):
+                x=table+i*40
+                if x+40>len(data): break
+                raw_size=struct.unpack_from("<I",data,x+16)[0]
+                raw_pos=struct.unpack_from("<I",data,x+20)[0]
+                ends.append(raw_pos+raw_size)
+            overlay_start=max(ends) if ends else 0
+            print("PE_SECTIONS:",num_sections,"OVERLAY_START:",overlay_start,
+                  "OVERLAY_BYTES:",max(0,len(data)-overlay_start),flush=True)
+
     def test_inventory(self):
         print("ARCHIVE_EXISTS:",ARCHIVE.is_file(),flush=True)
         self.assertTrue(ARCHIVE.is_file())
