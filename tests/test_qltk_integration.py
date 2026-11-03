@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT / "altare"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from scripts.game_profiles import PROFILES
-from altare import native_run, qltk_setup
+import native_run
+import qltk_setup
 from scripts.install_game import TIENNVO_QLTK
 
 
