@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.1"
+VERSION = "2026.11.03.2"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/qltk_setup.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -533,7 +533,7 @@ def handle(line):
     if cmd in ("help", "?"):
         if arg.strip().lower() in ("advanced", "setup"):
             say("Maintenance (not needed for daily VPS use):")
-            say("  setup [native|jar|game|qltk|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
+            say("  setup [native|jar|game|qltk|qltk-fonts|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
             say("  launcher-status | launcher-restart | job | job-stop")
             say("  game-screenshot | bash [command] | bash | quit")
             say("  Tip: launcher stays online after stopping the game.")
@@ -555,6 +555,8 @@ def handle(line):
             if IS_ALTARE_AMD64:
                 say("  setup qltk      Install TiênnVo account manager + Wine Mono")
                 say("  qltk on|off     Launch TiênnVo QLTK together with game")
+                say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
+                say("  setup qltk-fonts   Fix Vietnamese Unicode font rendering")
             if IS_ALTARE_AMD64:
                 say("  setup native    Install Altare amd64 Wine + Xvfb + VNC (no Box64)")
                 say("  setup jar       Install Java 17 + MicroEmulator + display (no Wine)")
@@ -669,15 +671,22 @@ def handle(line):
             "native": ("altare-native-setup", "native_setup.py", ()),
             "jar": ("altare-jar-setup", "jar_setup.py", ()),
             "qltk": ("altare-qltk-setup", "qltk_setup.py", ()),
+            "qltk-fonts": ("altare-qltk-fonts", "qltk_fonts.py", ()),
         }
         if action not in jobs:
-            say("Usage: setup [native|jar|game|qltk|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
+            say("Usage: setup [native|jar|game|qltk|qltk-fonts|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
         else:
             if action == "jar" or (action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "jar"):
                 if not IS_ALTARE_AMD64:
                     say("Java ME mode requires Altare x86_64")
                     return
                 launch_job("altare-jar-setup", ROOT / "altare" / "jar_setup.py")
+            elif action == "qltk-fonts":
+                from scripts.game_profiles import selected_key
+                if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
+                    say("setup qltk-fonts requires Altare x86_64 and game-select tiennvo")
+                    return
+                launch_job("altare-qltk-fonts", ROOT / "altare" / "qltk_fonts.py")
             elif action == "qltk":
                 from scripts.game_profiles import selected_key
                 if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
@@ -726,6 +735,40 @@ def handle(line):
                 say(f"VNC info failed (exit {result.returncode})")
     elif cmd == "vnc-public":
         vnc_options(arg)
+    elif cmd == "qltk-display":
+        from scripts.game_profiles import selected_key
+        if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
+            say("QLTK display is only available for TiênnVo on Altare")
+            return
+        cfg = RUNTIME / "tiennvo-qltk-display.json"
+        if not arg.strip():
+            try:
+                value = json.loads(cfg.read_text()) if cfg.is_file() else {"width": 1280, "height": 800}
+                say(f"QLTK VNC desktop: {value['width']}x{value['height']} (game resolution unchanged)")
+            except (ValueError, OSError, KeyError):
+                say("QLTK display config invalid; use qltk-display WIDTHxHEIGHT")
+            return
+        if (job_info() or {}).get("running"):
+            say("Stop the game before changing QLTK desktop size")
+            return
+        import re
+        match = re.fullmatch(r"(\d{4})x(\d{3,4})", arg.strip().lower())
+        if not match:
+            say("Usage: qltk-display WIDTHxHEIGHT, e.g. 1280x800")
+            return
+        width, height = (int(v) for v in match.groups())
+        if not 1024 <= width <= 1920 or not 650 <= height <= 1080:
+            say("QLTK desktop requires 1024..1920 width and 650..1080 height")
+            return
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        temp = cfg.with_suffix(".tmp")
+        try:
+            temp.write_text(json.dumps({"width": width, "height": height}), encoding="utf-8")
+            temp.chmod(0o600)
+            temp.replace(cfg)
+        finally:
+            temp.unlink(missing_ok=True)
+        say(f"QLTK desktop set to {width}x{height}; start to apply. Unity resolution unchanged.")
     elif cmd == "qltk":
         from scripts.game_profiles import selected_key
         if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
