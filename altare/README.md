@@ -341,3 +341,52 @@ Game cũ, JAR và dữ liệu khác không bị xóa. Có thể quay lại `stop
 Trong hướng dẫn gốc, tác giả khuyên bật **Giảm CPU** khi treo VPS. Theo tài liệu đi kèm, giảm CPU mức cao có thể giảm FPS hiển thị mà không ảnh hưởng tốc độ up. Đây là mô tả của tác giả, không phải benchmark xác nhận trên Altare.
 
 **Chú ý:** ZIP gồm phần mềm thứ ba không có mã nguồn để kiểm toán đầy đủ. Không dùng tài khoản chính khi mới thử; tuân thủ quy định dịch vụ và theo dõi CPU/fair-use. Nếu chạy đen/crash, lấy `logs 80`, `bash tail -n 80 .tgll-runtime/game-live-qltk.log` và Player.log trong prefix Up Đệ trước khi chỉnh renderer.
+
+## Up Đệ Basic: QLTK thoát code 1, Wine Mono báo #VMData / mscorlib
+
+Log có thể hiển thị:
+
+```text
+Unknown heap type: #VMData
+Failed to run module constructor ... mscorlib.dll type:TypeInitializationException
+QLTK wrapper exited code 1
+```
+
+Đây là lỗi khởi động ứng dụng .NET trên **Wine Mono**, chưa liên quan tới Unity/Direct3D. Tham chiếu `#VMData` có thể liên quan metadata đặc biệt của chương trình được bảo vệ/obfuscate. Không sửa EXE hay gỡ bảo vệ. WineHQ có trường hợp lỗi tương tự được khắc phục bằng Microsoft .NET Framework 4.8.
+
+### Thử Microsoft .NET Framework 4.8 an toàn (tùy chọn)
+
+Launcher dùng **Wine prefix thứ hai**: `.tgll-runtime/altare-wineprefix-upde-netfx`. Prefix Wine Mono cũ `.tgll-runtime/altare-wineprefix-upde` và dữ liệu game `game-upde/` **không bị sửa**. Không sửa Registry CSMT, không dùng proxy.
+
+```text
+stop
+update
+game-select upde
+setup upde-dotnet
+logs 80
+```
+
+`setup upde-dotnet` yêu cầu ít nhất 2 GiB dung lượng đĩa trống và tải Microsoft .NET Framework 4.8 thông qua Winetricks phiên bản ghim commit, cùng các dependency rootless từ Debian. Chỉ thao tác trong prefix mới; quá trình cài có thể không tương thích Wine 11 WoW64. Log chi tiết ở `.tgll-runtime/upde-dotnet48-install.log`, có thể xem:
+
+```text
+bash tail -n 80 .tgll-runtime/upde-dotnet48-install.log
+```
+
+Khi log báo **SUCCESS: Microsoft .NET Framework 4.8 installed**, chọn runtime rồi chạy:
+
+```text
+upde-runtime netfx
+start
+```
+
+Sau đó vào TigerVNC xem **QLTK** có hiện giao diện không. Nếu QLTK vẫn không hoạt động hoặc muốn về trạng thái trước:
+
+```text
+stop
+upde-runtime mono
+start
+```
+
+`upde-runtime` (không tham số) sẽ hiển thị mode hiện tại. Không cho chọn `netfx` nếu setup chưa xác minh được Microsoft .NET release Registry (>= 528040).
+
+**Lưu ý:** Thành công khi cài runtime **không có nghĩa QLTK hoặc Unity chắc chắn hoạt động**. Không tự đăng nhập trong bước cài. Winetricks sẽ tải installer chính hãng và kiểm chứng checksum riêng, nhưng một số phiên bản Wine mới WoW64 gặp lỗi cài .NET 4.x. Nếu cài thất bại, giữ nguyên Mono prefix, xem log trước khi thử tiếp. Mọi thay đổi chỉ là thử nghiệm tương thích, cần cân nhắc dung lượng và điều khoản lưu trú/compute của Altare.
