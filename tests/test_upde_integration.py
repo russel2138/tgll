@@ -35,6 +35,26 @@ class UpdeIntegrationTests(unittest.TestCase):
         # Validates safe archive names/links, uncompressed limit, and required files.
         upde_setup.check_archive(upde_setup.SOURCE)
 
+    def test_safe_extraction_keeps_existing_game_files(self):
+        import tempfile
+        import zipfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            archive = root / "example.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("QLTK.exe", b"test-qltk")
+                z.writestr("DragonBoy166.exe", b"test-game")
+                z.writestr("Data/Settings.txt", b"default")
+            dest = root / "game-upde"
+            with (patch.object(upde_setup, "DEST", dest),
+                  patch.object(upde_setup, "ROOT", root),
+                  patch.object(upde_setup, "REQUIRED", ("QLTK.exe", "DragonBoy166.exe"))):
+                upde_setup.extract_archive(archive)
+                self.assertEqual((dest / "DragonBoy166.exe").read_bytes(), b"test-game")
+                (dest / "Data/Settings.txt").write_bytes(b"my settings")
+                upde_setup.extract_archive(archive)
+                self.assertEqual((dest / "Data/Settings.txt").read_bytes(), b"my settings")
+
     def test_mono_shared_installer_supports_other_prefix(self):
         self.assertTrue(callable(qltk_setup.install_mono_at))
         self.assertEqual(upde_setup.PREFIX.name, "altare-wineprefix-upde")
