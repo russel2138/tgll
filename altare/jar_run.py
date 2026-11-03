@@ -78,7 +78,7 @@ def wait_for_vnc(port, p, logfile):
             time.sleep(0.2)
     raise RuntimeError("VNC port unavailable: " + logfile.read_text(errors="replace")[-1800:])
 
-def start_display(display, port, public):
+def start_display(display, port, public, geometry="400x340"):
     """Start only TigerVNC, as on Zampto/Ezonic. Never use x11vnc fallback."""
     # /tmp is ephemeral on Altare. Setup may have created the relocated
     # xkbcomp wrapper in a previous container session, so restore it on
@@ -93,7 +93,7 @@ def start_display(display, port, public):
     tiger_log = RUNTIME / "jar-tigervnc.log"
     log("Starting TigerVNC (integrated X11 + VNC; no fallback)")
     tiger = spawn("TigerVNC", [
-        str(tiger_binary), display, "-geometry", "400x340", "-depth", "24",
+        str(tiger_binary), display, "-geometry", geometry, "-depth", "24",
         "-rfbport", str(port),
         "-SecurityTypes", "VncAuth", "-rfbauth", str(PASSWD),
         "-localhost", "no" if public else "yes",
