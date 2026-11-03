@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.3"
+VERSION = "2026.11.03.4"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -555,6 +555,7 @@ def handle(line):
             if IS_ALTARE_AMD64:
                 say("  setup qltk      Install TiênnVo account manager + Wine Mono")
                 say("  qltk on|off     QLTK opens TiênnVo game when you click Login")
+                say("  graphics [default|glsl-vkd3d|bitblt|glcore|singlethread]")
                 say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
                 say("  setup qltk-fonts   Fix Vietnamese Unicode font rendering")
             if IS_ALTARE_AMD64:
@@ -769,6 +770,52 @@ def handle(line):
         finally:
             temp.unlink(missing_ok=True)
         say(f"QLTK desktop set to {width}x{height}; start to apply. Unity resolution unchanged.")
+    elif cmd == "graphics":
+        from scripts.game_profiles import selected_key
+        if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
+            say("graphics is available only for TiênnVo EXE on Altare x86_64")
+            return
+        import sys as _sys
+        module_path = str(ROOT / "altare")
+        if module_path not in _sys.path:
+            _sys.path.insert(0, module_path)
+        from graphics_modes import MODES, MANAGER_MODES, read_mode
+        settings_file = RUNTIME / "tiennvo-graphics.json"
+        requested = arg.strip().lower()
+        if not requested:
+            try:
+                say("TiênnVo graphics: " + read_mode(settings_file))
+            except (OSError, ValueError) as error:
+                say("Graphics settings error: " + str(error))
+            say("Modes: " + " | ".join(MODES))
+            say("QLTK on supports default and glsl-vkd3d; remaining modes require qltk off")
+            return
+        if requested not in MODES:
+            say("Choose: " + " | ".join(MODES))
+            return
+        if (job_info() or {}).get("running"):
+            say("Stop active game before changing graphics mode")
+            return
+        qltk_file = RUNTIME / "tiennvo-qltk.json"
+        qltk_active = False
+        if qltk_file.is_file():
+            try:
+                qltk_active = bool(json.loads(qltk_file.read_text()).get("enabled", False))
+            except (OSError, ValueError):
+                say("QLTK settings are invalid; refusing graphics change")
+                return
+        if qltk_active and requested not in MANAGER_MODES:
+            say(f"graphics {requested} requires qltk off: QLTK does not pass Unity flags")
+            return
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        temp = settings_file.with_suffix(".tmp")
+        try:
+            temp.write_text(json.dumps({"mode": requested}), encoding="utf-8")
+            temp.chmod(0o600)
+            temp.replace(settings_file)
+        finally:
+            temp.unlink(missing_ok=True)
+        say(f"TiênnVo graphics = {requested}; next start will apply, CSMT registry unchanged")
     elif cmd == "qltk":
         from scripts.game_profiles import selected_key
         if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
