@@ -34,6 +34,9 @@ UNITY_LOG = RUNTIME / ("game-live-" + PROFILE["name"] + "-Player.log")
 WINE_LOG = RUNTIME / "game-live-wine.log"
 XVFB_LOG = RUNTIME / "game-live-xvfb.log"
 VNC_LOG = RUNTIME / "game-live-vnc.log"
+QLTK_LOG = RUNTIME / "game-live-qltk.log"
+QLTK_SETTINGS = RUNTIME / "tiennvo-qltk.json"
+QLTK_MONO_MARKER = WINEPREFIX / ".wine-mono-11.3.0.ok"
 PROXYCHAINS = PKGROOT / "usr/bin/proxychains4"
 PROXY_LIBRARY = PKGROOT / "usr/lib/x86_64-linux-gnu/libproxychains.so.4"
 
@@ -172,6 +175,15 @@ def prepare_proxy(proxy):
     return path
 
 
+def qltk_enabled() -> bool:
+    if selected_key() != "tiennvo":
+        return False
+    if not QLTK_SETTINGS.is_file():
+        return False
+    data = json.loads(QLTK_SETTINGS.read_text(encoding="utf-8"))
+    return bool(data.get("enabled", False))
+
+
 def validate():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare native runner is only for Linux x86_64")
@@ -186,6 +198,10 @@ def validate():
                                "; run setup native, vnc-password, or setup game")
     if PASSWD.stat().st_mode & 0o077:
         raise RuntimeError("VNC password permissions are not private (expected 0600)")
+    if qltk_enabled():
+        for path in (GAME / "QLTK.exe", GAME / "QLTK.exe.config", QLTK_MONO_MARKER):
+            if not path.is_file():
+                raise RuntimeError("QLTK not ready; run setup qltk: missing " + str(path))
 
 def main():
     proxy = read_proxy_request()
@@ -196,9 +212,12 @@ def main():
     saved_size = RUNTIME / "game-resolutions.json"
     data = json.loads(saved_size.read_text()) if saved_size.is_file() else {}
     width, height = map(int, data.get(selected_key(), list(default_size)))
+    use_qltk = qltk_enabled()
+    desktop_width, desktop_height = (max(width, 800), max(height, 600)) if use_qltk else (width, height)
     if not (320 <= width <= 960 and 240 <= height <= 720):
         raise RuntimeError("Resolution out of supported range")
     log(f"Native x86_64 Wine (no Box64): {PROFILE['name']} at {width}x{height}")
+    log(f"QLTK: {'enabled' if use_qltk else 'disabled'}; VNC desktop {desktop_width}x{desktop_height}")
     log(f"VNC port={port} bind={'0.0.0.0' if public else '127.0.0.1'}")
     if public:
         log("WARNING: VNC password does not encrypt traffic; use private networking if available")
@@ -209,7 +228,7 @@ def main():
     env_wine["WINEDEBUG"] = "-all,err+all"
     env_wine["WINEESYNC"] = "0"
     env_wine["WINEFSYNC"] = "0"
-    vnc_scale = bool(settings.get("scale", False)) and (width > 640 or height > 480)
+    vnc_scale = bool(settings.get("scale", False)) and (desktop_width > 640 or desktop_height > 480)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.unlink(missing_ok=True)
     proxy_file = None
@@ -217,7 +236,7 @@ def main():
         if proxy is not None:
             proxy_file = prepare_proxy(proxy)
         xvfb = child("Xvfb", [
-            str(BIN_XVFB), display, "-screen", "0", f"{width}x{height}x24",
+            str(BIN_XVFB), display, "-screen", "0", f"{desktop_width}x{desktop_height}x24",
             "-nolisten", "tcp", "-noreset", "-xkbdir", str(XKB_DATA)],
             environment(display, for_xvfb=True), XVFB_LOG)
         await_display(display, xvfb)
@@ -241,11 +260,21 @@ def main():
         if proxy_file is not None:
             args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *args]
         game = child(PROFILE["name"], args, env_wine, WINE_LOG, cwd=GAME)
+        qltk = None
+        if use_qltk:
+            # Same Wine prefix, working directory and DISPLAY; supports the
+            # mod's loopback IPC at 127.0.0.1:14445 without changing socket.ini.
+            qltk_args = [str(WINE), str(GAME / "QLTK.exe")]
+            if proxy_file is not None:
+                qltk_args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *qltk_args]
+            qltk = child("QLTK", qltk_args, env_wine, QLTK_LOG, cwd=GAME)
         SESSION_FILE.write_text(json.dumps({
             "display": display, "vnc_port": port, "vnc_public": public,
             "game_resolution": f"{width}x{height}",
-            "vnc_resolution": "640x480" if vnc_scale else f"{width}x{height}",
+            "vnc_resolution": "640x480" if vnc_scale else f"{desktop_width}x{desktop_height}",
             "game": PROFILE["name"], "game_pid": game.pid, "vnc_pid": vnc.pid,
+            "qltk_enabled": use_qltk, "qltk_pid": qltk.pid if qltk else None,
+            "display_resolution": f"{desktop_width}x{desktop_height}",
             "proxy_mode": "socks5" if proxy else "direct",
             "proxy_host": proxy["host"] if proxy else None,
             "xvfb_pid": xvfb.pid, "cpu_quota": "Altare cgroup (no extra affinity cap)",
@@ -253,11 +282,15 @@ def main():
         }, indent=2), encoding="utf-8")
         log("Native Windows EXE session started; connect to Altare VNC endpoint")
         start = time.monotonic()
+        qltk_exited = False
         while not STOP:
             if game.poll() is not None:
                 log(f"Wine process exited with code {game.returncode}")
                 log("Wine log tail:\n" + WINE_LOG.read_text(errors="replace")[-1600:])
                 break
+            if qltk is not None and not qltk_exited and qltk.poll() is not None:
+                qltk_exited = True
+                log(f"QLTK exited code {qltk.returncode}; game continues. Check game-live-qltk.log")
             if xvfb.poll() is not None or vnc.poll() is not None:
                 log("Xvfb or VNC exited; stopping session")
                 break
@@ -266,7 +299,8 @@ def main():
             time.sleep(2)
     finally:
         log("Stopping Wine -> wineserver -> VNC -> Xvfb")
-        stop_child("TGLL")
+        stop_child("QLTK")
+        stop_child(PROFILE["name"])
         try:
             subprocess.run([str(WINESERVER), "-k"], env=env_wine, timeout=15,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
