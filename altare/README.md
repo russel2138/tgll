@@ -206,3 +206,21 @@ start
 ```
 
 Trong VNC viewer có thể bật fit-to-screen hoặc cuộn để quan sát toàn bộ màn hình. `vnc-scale on` trên Altare có thể thu nhỏ 1280×800 xuống 640×480, phù hợp xem toàn cảnh nhưng chữ sẽ nhỏ. Không cần đổi cổng, mật khẩu VNC, dữ liệu tài khoản hoặc cài lại `setup qltk`.
+
+## TiênnVo QLTK: bộ font đã cài nhưng dấu tiếng Việt vẫn thành ô vuông
+
+Đã xác nhận trong `QLTK.exe` từ ZIP của TiênnVo có tham chiếu trực tiếp đến font **Segoe UI** và **Microsoft Sans Serif**. Chỉ cài font DejaVu + Fontconfig alias có thể chưa đủ vì GDI/WinForms/Wine có cơ chế chọn font riêng. WineHQ xác nhận Wine hỗ trợ mapping theo user tại `HKCU\\Software\\Wine\\Fonts\\Replacements`.
+
+Bản mới của `setup qltk-fonts` sẽ đăng ký hai font này thành alias **DejaVu Sans** trong *Wine prefix riêng TiênnVo* (không can thiệp game JAR, TGLL hoặc prefix khác). Các font DejaVu đã tải trước đó được tái sử dụng; chỉ thêm registry alias, không cần tải/cài lại game. Cấu hình tự lưu trong prefix và sẽ tự áp dụng khi khởi chạy QLTK mới.
+
+Console:
+
+```text
+stop
+update
+setup qltk-fonts
+logs 50
+start
+```
+
+Chờ `logs` báo `Wine font substitutions registered for QLTK UI` và `Unicode fonts ready` trước khi `start`. Không cần thay `qltk-display` hoặc `resolution` vì giao diện đã đủ. Chụp lại màn hình VNC nếu lỗi dấu vẫn còn; khi đó nguyên nhân có thể là font đã embed trong Guna UI hoặc cách ứng dụng xử lý glyph riêng, không nên cài thêm các font ngẫu nhiên hay sửa binary EXE vội.
