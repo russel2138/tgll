@@ -17,6 +17,12 @@ PROFILES = {
         "data": "TheGioiLangLa_Data",
         "wineprefix": "wineprefix-test",
     },
+    "nroemu": {
+        "name": "NRO Emulator V2 (Linux desktop Java)",
+        "directory": ".tgll-runtime/nroemu",
+        "jar": "nro-emulator-v2.jar",
+        "engine": "java_desktop",
+    },
     "jar": {
         "name": "Java ME (game.jar)",
         "directory": "jar-game",
