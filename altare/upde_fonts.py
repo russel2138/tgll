@@ -14,7 +14,6 @@ import sys
 
 from native_setup import ROOT, RUNTIME, PKGROOT, environment, install_packages
 from qltk_fonts import FONT_FILES, config_xml
-from upde_runtime import marker_for
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import selected_key
