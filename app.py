@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.4"
+VERSION = "2026.11.03.5"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -544,7 +544,7 @@ def handle(line):
             say("  restart [ip:port[:user:pass]]  Reuse current SOCKS5 if omitted")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
-            say("  game-select jar|tgll|moddp250|tiennvo   Switch game (stop first)")
+            say("  game-select jar|tgll|moddp250|tiennvo|upde   Switch game (stop first)")
             if IS_ALTARE_AMD64:
                 say("  list            List uploaded Java ME games/emulators")
                 say("  jar-select stock game.jar   Select Java ME pair after stop")
@@ -554,6 +554,7 @@ def handle(line):
             say("  setup game      Install selected game (ZIP or JAR)")
             if IS_ALTARE_AMD64:
                 say("  setup qltk      Install TiênnVo account manager + Wine Mono")
+                say("  game-select upde | setup game    Install new Up Đệ Basic from GitHub ZIP")
                 say("  qltk on|off     QLTK opens TiênnVo game when you click Login")
                 say("  graphics [default|glsl-vkd3d|bitblt|glcore|singlethread]")
                 say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
@@ -577,9 +578,9 @@ def handle(line):
         if not choice:
             current = selected_key()
             say(f"Selected game: {current} ({PROFILES[current]['name']})")
-            say("Use: game-select jar | tgll | moddp250 | tiennvo")
+            say("Use: game-select jar | tgll | moddp250 | tiennvo | upde")
         elif choice not in PROFILES:
-            say("Use: game-select jar | tgll | moddp250 | tiennvo")
+            say("Use: game-select jar | tgll | moddp250 | tiennvo | upde")
         elif (job_info() or {}).get("running"):
             say("Stop the active game/job before switching: stop or job-stop")
         else:
@@ -596,7 +597,7 @@ def handle(line):
         from scripts.game_profiles import selected_key
         game_key = selected_key()
         cfg_path = RUNTIME / "game-resolutions.json"
-        defaults = {"moddp250": [800, 600], "tgll": [640, 480], "tiennvo": [400, 340]}
+        defaults = {"moddp250": [800, 600], "tgll": [640, 480], "tiennvo": [400, 340], "upde": [400, 340]}
         if game_key == "jar":
             say("Java ME display is fixed at 400x340 (game 400x300); resolution is for Windows games only")
             return
@@ -682,6 +683,11 @@ def handle(line):
                     say("Java ME mode requires Altare x86_64")
                     return
                 launch_job("altare-jar-setup", ROOT / "altare" / "jar_setup.py")
+            elif action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "upde":
+                if not IS_ALTARE_AMD64:
+                    say("Up Đệ Basic requires Altare x86_64")
+                    return
+                launch_job("altare-upde-setup", ROOT / "altare" / "upde_setup.py")
             elif action == "qltk-fonts":
                 from scripts.game_profiles import selected_key
                 if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
@@ -690,6 +696,9 @@ def handle(line):
                 launch_job("altare-qltk-fonts", ROOT / "altare" / "qltk_fonts.py")
             elif action == "qltk":
                 from scripts.game_profiles import selected_key
+                if selected_key() == "upde":
+                    say("Up Đệ QLTK is installed by setup game; run setup game instead")
+                    return
                 if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
                     say("setup qltk requires Altare x86_64 with game-select tiennvo")
                     return
@@ -738,10 +747,10 @@ def handle(line):
         vnc_options(arg)
     elif cmd == "qltk-display":
         from scripts.game_profiles import selected_key
-        if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
-            say("QLTK display is only available for TiênnVo on Altare")
+        if not IS_ALTARE_AMD64 or selected_key() not in ("tiennvo", "upde"):
+            say("QLTK display is only available for TiênnVo/Up Đệ on Altare")
             return
-        cfg = RUNTIME / "tiennvo-qltk-display.json"
+        cfg = RUNTIME / ("upde-qltk-display.json" if selected_key() == "upde" else "tiennvo-qltk-display.json")
         if not arg.strip():
             try:
                 value = json.loads(cfg.read_text()) if cfg.is_file() else {"width": 1280, "height": 800}
@@ -818,10 +827,10 @@ def handle(line):
         say(f"TiênnVo graphics = {requested}; next start will apply, CSMT registry unchanged")
     elif cmd == "qltk":
         from scripts.game_profiles import selected_key
-        if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
-            say("QLTK control is only for TiênnVo EXE on Altare x86_64")
+        if not IS_ALTARE_AMD64 or selected_key() not in ("tiennvo", "upde"):
+            say("QLTK control is only for TiênnVo or Up Đệ on Altare x86_64")
             return
-        file = RUNTIME / "tiennvo-qltk.json"
+        file = RUNTIME / ("upde-qltk.json" if selected_key() == "upde" else "tiennvo-qltk.json")
         option = arg.strip().lower()
         if option not in ("on", "off"):
             enabled = False
@@ -835,7 +844,7 @@ def handle(line):
         if (job_info() or {}).get("running"):
             say("Stop the active game before toggling QLTK")
             return
-        if option == "on" and not (ROOT / "game-tiennvo/QLTK.exe").is_file():
+        if option == "on" and not (ROOT / ("game-upde" if selected_key() == "upde" else "game-tiennvo") / "QLTK.exe").is_file():
             say("QLTK not installed; run setup qltk first")
             return
         if option == "on":
