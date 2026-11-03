@@ -390,3 +390,28 @@ start
 `upde-runtime` (không tham số) sẽ hiển thị mode hiện tại. Không cho chọn `netfx` nếu setup chưa xác minh được Microsoft .NET release Registry (>= 528040).
 
 **Lưu ý:** Thành công khi cài runtime **không có nghĩa QLTK hoặc Unity chắc chắn hoạt động**. Không tự đăng nhập trong bước cài. Winetricks sẽ tải installer chính hãng và kiểm chứng checksum riêng, nhưng một số phiên bản Wine mới WoW64 gặp lỗi cài .NET 4.x. Nếu cài thất bại, giữ nguyên Mono prefix, xem log trước khi thử tiếp. Mọi thay đổi chỉ là thử nghiệm tương thích, cần cân nhắc dung lượng và điều khoản lưu trú/compute của Altare.
+
+## Up Đệ Basic: tiếng Việt hiển thị ô vuông trên Wine Mono hoặc .NET 4.8
+
+Bộ `setup game` trước đây chỉ copy DejaVu fonts vào prefix Mono của Up Đệ. Prefix .NET 4.8 là thư mục riêng, vì vậy có thể thiếu font dù bản Mono đã có. Ngoài Fontconfig, ứng dụng WinForms có thể gọi Windows family theo tên, cần đăng ký mapping trong Wine.
+
+Sau khi **hoàn tất** công việc cài `setup upde-dotnet` (kiểm tra `job` đã xong) và dừng mọi phiên game:
+
+```text
+stop
+update
+game-select upde
+setup upde-fonts
+logs 60
+```
+
+Lệnh sửa font chỉ sửa các prefix Up Đệ đã được tạo `.tgll-runtime/altare-wineprefix-upde` và `.tgll-runtime/altare-wineprefix-upde-netfx`, không tạo prefix mới. Nó copy bốn file DejaVu từ gói Debian đã xác minh vào `drive_c/windows/Fonts`, áp dụng alias Wine Registry cho `Segoe UI` và `Microsoft Sans Serif` → `DejaVu Sans` rồi cập nhật Fontconfig của Up Đệ. Có thể chạy lại nhiều lần, không xóa game, tài khoản, QLTK hay cài lại runtime.
+
+Khi thấy `[upde-fonts] SUCCESS: repaired fonts in ...` và đã cài .NET thành công:
+
+```text
+upde-runtime netfx
+start
+```
+
+Việc sửa font **không giải quyết lỗi Wine Mono `Unknown heap type: #VMData`**, và không bảo đảm sửa glyph tùy biến của Guna UI. Nếu QLTK .NET 4.8 vẫn chưa mở được hoặc font vẫn sai, xem `game-live-qltk.log` hoặc gửi ảnh VNC mới.
