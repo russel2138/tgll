@@ -37,8 +37,8 @@ WINE_LOG = RUNTIME / "game-live-wine.log"
 XVFB_LOG = RUNTIME / "game-live-xvfb.log"
 VNC_LOG = RUNTIME / "game-live-vnc.log"
 QLTK_LOG = RUNTIME / "game-live-qltk.log"
-QLTK_SETTINGS = RUNTIME / "tiennvo-qltk.json"
-QLTK_DISPLAY_SETTINGS = RUNTIME / "tiennvo-qltk-display.json"
+QLTK_SETTINGS = RUNTIME / ("upde-qltk.json" if selected_key() == "upde" else "tiennvo-qltk.json")
+QLTK_DISPLAY_SETTINGS = RUNTIME / ("upde-qltk-display.json" if selected_key() == "upde" else "tiennvo-qltk-display.json")
 QLTK_MONO_MARKER = WINEPREFIX / ".wine-mono-11.3.0.ok"
 GRAPHICS_SETTINGS = RUNTIME / "tiennvo-graphics.json"
 PROXYCHAINS = PKGROOT / "usr/bin/proxychains4"
@@ -180,7 +180,7 @@ def prepare_proxy(proxy):
 
 
 def qltk_enabled() -> bool:
-    if selected_key() != "tiennvo":
+    if selected_key() not in ("tiennvo", "upde"):
         return False
     if not QLTK_SETTINGS.is_file():
         return False
@@ -206,7 +206,7 @@ def desktop_dimensions(game_width: int, game_height: int, with_qltk: bool) -> tu
 
 def startup_owner(game_key: str, manager_enabled: bool) -> str:
     """QLTK starts Unity on Login; without QLTK launch the Unity EXE directly."""
-    return "qltk" if game_key == "tiennvo" and manager_enabled else "game"
+    return "qltk" if game_key in ("tiennvo", "upde") and manager_enabled else "game"
 
 
 def validate():
@@ -214,10 +214,15 @@ def validate():
         raise RuntimeError("Altare native runner is only for Linux x86_64")
     if "exe" not in PROFILE:
         raise RuntimeError("Select a Windows EXE game profile, not JAR")
+    if PROFILE.get("engine") == "unity_mono":
+        engine_files = (GAME / PROFILE["data"] / "Managed/Assembly-CSharp.dll",
+                        GAME / PROFILE["data"] / "Managed/UnityEngine.dll",
+                        GAME / "Run/Dragonboy_vn_v229.exe")
+    else:
+        engine_files = (GAME / "UnityPlayer.dll", GAME / "GameAssembly.dll",
+                        GAME / PROFILE["data"] / "boot.config")
     for path in (BIN_XVFB, BIN_VNC, XKB_DATA / "rules/evdev",
-                 SHIM, PASSWD, WINE, WINESERVER, EXE,
-                 GAME / "UnityPlayer.dll", GAME / "GameAssembly.dll",
-                 GAME / PROFILE["data"] / "boot.config"):
+                 SHIM, PASSWD, WINE, WINESERVER, EXE, *engine_files):
         if not path.is_file():
             raise RuntimeError("Missing " + str(path) +
                                "; run setup native, vnc-password, or setup game")
@@ -233,7 +238,7 @@ def main():
     validate()
     settings, port, public = config()
     display = pick_display()
-    default_size = (400, 340) if selected_key() == "tiennvo" else (640, 480)
+    default_size = (400, 340) if selected_key() in ("tiennvo", "upde") else (640, 480)
     saved_size = RUNTIME / "game-resolutions.json"
     data = json.loads(saved_size.read_text()) if saved_size.is_file() else {}
     width, height = map(int, data.get(selected_key(), list(default_size)))
@@ -259,8 +264,10 @@ def main():
         log(f"TiênnVo graphics: {graphics_mode} (QLTK owns launch: {use_qltk})")
     else:
         unity_flags = ()
-    if use_qltk and FONTS_CONFIG.is_file():
-        env_wine["FONTCONFIG_FILE"] = str(FONTS_CONFIG)
+    active_fontconfig = (RUNTIME / "altare-amd64/upde-fontconfig.xml"
+                         if selected_key() == "upde" else FONTS_CONFIG)
+    if use_qltk and active_fontconfig.is_file():
+        env_wine["FONTCONFIG_FILE"] = str(active_fontconfig)
     vnc_scale = bool(settings.get("scale", False)) and (desktop_width > 640 or desktop_height > 480)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.unlink(missing_ok=True)
@@ -289,7 +296,7 @@ def main():
         qltk = None
         if owner == "qltk":
             # QLTK creates Unity on Login. Never pre-launch duplicate Unity.
-            qltk_args = [str(WINE), str(GAME / "QLTK.exe")]
+            qltk_args = [str(WINE), str(GAME / PROFILE.get("manager", "QLTK.exe"))]
             if proxy_file is not None:
                 qltk_args = [str(PROXYCHAINS), "-q", "-f", str(proxy_file), *qltk_args]
             qltk = child("QLTK", qltk_args, env_wine, QLTK_LOG, cwd=GAME)

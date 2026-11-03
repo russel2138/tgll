@@ -283,3 +283,61 @@ start
 Lệnh `graphics` không có đối số hiển thị mode hiện tại. Mode được lưu cục bộ ở `.tgll-runtime/tiennvo-graphics.json` (không lưu tài khoản/password), chỉ có hiệu lực khi `start` phiên mới. `status` có `graphics_mode`. Không có bước nào đụng tới `HKCU\\Software\\Wine\\Direct3D\\csmt`.
 
 Nếu game vẫn đen/crash, giữ log QLTK và Player.log mới; đặc biệt tìm lỗi `Unhandled exception`, `wined3d`, `d3d11`, `dxgi`. Lưu ý lỗi `BaseLib` assembly .NET của QLTK khác với `baselib.dll` native Unity. Không tải DLL từ nguồn không đáng tin.
+
+## Tool Up Đệ Cơ Bản TiênnVo (file ZIP đã commit lên GitHub)
+
+Nguồn: `[TiennVo.Net]Tool Up De Basic.zip` ở commit `f45aebcf` (61 MB). SHA256: `b7bb0302e4a0d7dce961a17538eb2b752319c4eb0ce4ef23bff1c8c822cb5901`.
+
+Đã kiểm tra tĩnh 110 file, 300 MiB sau giải nén, không mã hóa. ZIP chứa:
+
+- `QLTK.exe`: .NET Framework 4.7.2 32-bit
+- `DragonBoy166.exe` và `Run/Dragonboy_vn_v229.exe`: hai client Unity Mono 32-bit
+- Các DLL và tài nguyên đi kèm nằm đúng trong cây thư mục ZIP
+
+Đây là **bộ mới khác `MOD_Tiennvo_249.exe` x64/IL2CPP**, không chạy chồng với profile cũ. Wine 11.19 với WoW64 có thể chạy ứng dụng Windows 32-bit trên Altare x86_64, nhưng GUI và đồ họa chưa được kiểm chứng thực tế.
+
+### Cách dùng
+
+```text
+stop
+game-autostart off
+update
+game-select upde
+setup game
+logs 80
+```
+
+- Cần `setup native` thành công ít nhất một lần trước đó, không cần cài lại nếu Wine/Xvfb/VNC hiện có hoạt động
+- `setup game` tự download ZIP từ **commit GitHub cố định**, kiểm tra SHA256 và giải nén an toàn vào `game-upde/` (không chạy file EXE lúc cài)
+- Cùng job tự cài Wine Mono vào prefix riêng `.tgll-runtime/altare-wineprefix-upde`, cài font DejaVu và bật QLTK
+- Chờ log `SUCCESS: Up Đệ Basic installed, QLTK enabled` trước khi chạy `start`
+- Lúc `start` chỉ mở QLTK và VNC. QLTK chọn tài khoản và **Login** để mở game, không pre-launch Unity
+- Không cần proxy: `start` (không có đối số) là direct
+
+```text
+start
+status
+logs 80
+```
+
+Nếu muốn chỉ mở game để kiểm tra giao diện (không tự đăng nhập bằng QLTK):
+
+```text
+stop
+qltk off
+start
+```
+
+Khôi phục cơ chế QLTK:
+
+```text
+stop
+qltk on
+start
+```
+
+Game cũ, JAR và dữ liệu khác không bị xóa. Có thể quay lại `stop` → `game-select tiennvo` → `start`. Cấu hình `graphics` cho TiênnVo IL2CPP cũ không được áp vào profile Up Đệ.
+
+Trong hướng dẫn gốc, tác giả khuyên bật **Giảm CPU** khi treo VPS. Theo tài liệu đi kèm, giảm CPU mức cao có thể giảm FPS hiển thị mà không ảnh hưởng tốc độ up. Đây là mô tả của tác giả, không phải benchmark xác nhận trên Altare.
+
+**Chú ý:** ZIP gồm phần mềm thứ ba không có mã nguồn để kiểm toán đầy đủ. Không dùng tài khoản chính khi mới thử; tuân thủ quy định dịch vụ và theo dõi CPU/fair-use. Nếu chạy đen/crash, lấy `logs 80`, `bash tail -n 80 .tgll-runtime/game-live-qltk.log` và Player.log trong prefix Up Đệ trước khi chỉnh renderer.
