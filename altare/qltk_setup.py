@@ -141,19 +141,20 @@ def free_display() -> tuple[int, str]:
     raise RuntimeError("No free X11 display for Mono setup")
 
 
-def install_mono() -> None:
-    if MONO_MARKER.is_file():
-        say("Wine Mono was already installed for this TiênnVo prefix")
+def install_mono_at(prefix: Path, game_dir: Path, label: str = "qltk") -> None:
+    marker = prefix / (".wine-mono-" + MONO_VERSION + ".ok")
+    if marker.is_file():
+        say("Wine Mono was already installed for " + label)
         return
     download_mono()
     if not BIN_XVFB.is_file() or not SHIM.is_file() or not WINE.is_file():
         raise RuntimeError("Run setup native before setup qltk")
     num, display = free_display()
     env = environment(display)
-    env.update({"WINEPREFIX": str(PREFIX), "WINEARCH": "win64",
+    env.update({"WINEPREFIX": str(prefix), "WINEARCH": "win64",
                 "WINEDEBUG": "-all,err+all", "WINEESYNC": "0", "WINEFSYNC": "0"})
-    PREFIX.mkdir(parents=True, exist_ok=True)
-    log_file = RUNTIME / "qltk-xvfb.log"
+    prefix.mkdir(parents=True, exist_ok=True)
+    log_file = RUNTIME / (label + "-xvfb.log")
     with log_file.open("w", encoding="utf-8") as out:
         xvfb = subprocess.Popen(
             [str(BIN_XVFB), display, "-screen", "0", "800x600x24",
@@ -172,19 +173,19 @@ def install_mono() -> None:
         else:
             raise RuntimeError("Xvfb did not create display for Wine Mono install")
         say("Initializing dedicated Wine prefix (32-bit QLTK via WOW64)")
-        init = subprocess.run([str(WINE), "wineboot", "-u"], env=env, cwd=GAME,
+        init = subprocess.run([str(WINE), "wineboot", "-u"], env=env, cwd=game_dir,
                               capture_output=True, text=True, timeout=120, check=False)
         if init.returncode:
             raise RuntimeError("Wine prefix initialization failed: " + init.stderr[-1300:])
         say("Installing Wine Mono .NET compatibility runtime into TiênnVo prefix")
         proc = subprocess.run([str(WINE), "msiexec", "/i", str(MONO_MSI),
-                               "/qn", "/norestart"], env=env, cwd=GAME,
+                               "/qn", "/norestart"], env=env, cwd=game_dir,
                               capture_output=True, text=True, timeout=240, check=False)
         if proc.returncode:
             raise RuntimeError("Wine Mono installer returned code " + str(proc.returncode) +
                                ": " + proc.stderr[-1200:])
-        MONO_MARKER.write_text(MONO_SHA256 + "\n", encoding="utf-8")
-        say("Wine Mono MSI installed successfully (does not prove QLTK compatibility)")
+        marker.write_text(MONO_SHA256 + "\n", encoding="utf-8")
+        say("Wine Mono installed for " + label + " (app compatibility unverified)")
     finally:
         if xvfb.poll() is None:
             xvfb.terminate()
@@ -194,6 +195,10 @@ def install_mono() -> None:
                 xvfb.kill()
                 xvfb.wait()
 
+
+
+def install_mono() -> None:
+    install_mono_at(PREFIX, GAME, "qltk")
 
 def main() -> None:
     if selected_key() != "tiennvo":
