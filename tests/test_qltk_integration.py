@@ -77,6 +77,34 @@ class QltkIntegrationTest(unittest.TestCase):
         self.assertIn("Tahoma", config)
         self.assertEqual(qltk_fonts.WINEPREFIX.name, "altare-wineprefix-tiennvo")
 
+    def test_rootless_fonts_from_debian_core_only(self):
+        self.assertEqual(set(qltk_fonts.FONT_FILES), {
+            "DejaVuSans.ttf", "DejaVuSans-Bold.ttf",
+            "DejaVuSansMono.ttf", "DejaVuSansMono-Bold.ttf",
+        })
+        with tempfile.TemporaryDirectory() as tmp:
+            basedir = Path(tmp)
+            source = basedir / "pkg" / "usr/share/fonts/truetype/dejavu"
+            source.mkdir(parents=True)
+            for name in qltk_fonts.FONT_FILES:
+                (source / name).write_bytes(b"dummy-font-file")
+            dest = basedir / "prefix" / "drive_c/windows/Fonts"
+            settings = basedir / "tiennvo-fontconfig.xml"
+            marker = basedir / "prefix" / ".fonts-ok"
+            with (patch.object(qltk_fonts, "SOURCE_FONT_DIR", source),
+                  patch.object(qltk_fonts, "WINDOWS_FONTS", dest),
+                  patch.object(qltk_fonts, "FONTS_CONFIG", settings),
+                  patch.object(qltk_fonts, "FONT_MARKER", marker),
+                  patch.object(qltk_fonts, "selected_key", return_value="tiennvo"),
+                  patch.object(qltk_fonts, "install_packages") as install_pkg):
+                qltk_fonts.install_fonts()
+                install_pkg.assert_not_called()
+                self.assertTrue(settings.is_file())
+                self.assertTrue(marker.is_file())
+                self.assertTrue(all((dest / name).is_file() for name in qltk_fonts.FONT_FILES))
+                qltk_fonts.install_fonts()
+                install_pkg.assert_not_called()
+
     def test_mono_download_checksum_is_pinned(self):
         self.assertEqual(len(qltk_setup.MONO_SHA256), 64)
         self.assertTrue(all(c in "0123456789abcdef" for c in qltk_setup.MONO_SHA256))

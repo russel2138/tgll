@@ -22,8 +22,9 @@ WINDOWS_FONTS = WINEPREFIX / "drive_c/windows/Fonts"
 FONTS_CONFIG = RUNTIME / "altare-amd64" / "tiennvo-fontconfig.xml"
 FONT_MARKER = WINEPREFIX / ".qltk-unicode-fonts-v1.ok"
 SOURCE_FONT_DIR = PKGROOT / "usr/share/fonts/truetype/dejavu"
+# These four names are in Debian bookworm fonts-dejavu-core (not -extra).
 FONT_FILES = ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf",
-              "DejaVuSansMono.ttf", "DejaVuSansCondensed.ttf")
+              "DejaVuSansMono.ttf", "DejaVuSansMono-Bold.ttf")
 FONT_ALIASES = ("Tahoma", "Arial", "Segoe UI",
                 "Microsoft Sans Serif", "MS Sans Serif")
 
