@@ -1,5 +1,6 @@
 """Offline tests: no game EXE is executed, no network is used."""
 import json
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -96,14 +97,43 @@ class QltkIntegrationTest(unittest.TestCase):
                   patch.object(qltk_fonts, "FONTS_CONFIG", settings),
                   patch.object(qltk_fonts, "FONT_MARKER", marker),
                   patch.object(qltk_fonts, "selected_key", return_value="tiennvo"),
+                  patch.object(qltk_fonts, "FONT_REPLACEMENTS_MARKER", basedir / "prefix" / ".wine-mapping-ok"),
+                  patch.object(qltk_fonts, "install_wine_font_replacements") as install_wine_fonts,
                   patch.object(qltk_fonts, "install_packages") as install_pkg):
                 qltk_fonts.install_fonts()
                 install_pkg.assert_not_called()
+                install_wine_fonts.assert_called_once()
                 self.assertTrue(settings.is_file())
                 self.assertTrue(marker.is_file())
                 self.assertTrue(all((dest / name).is_file() for name in qltk_fonts.FONT_FILES))
                 qltk_fonts.install_fonts()
                 install_pkg.assert_not_called()
+
+    def test_wine_registry_mapping_for_qltk_fonts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wine = root / "wine"
+            wine.write_bytes(b"fake-wine")
+            marker = root / ".wine-font-registry-ok"
+            with (patch.object(qltk_fonts, "WINE", wine),
+                  patch.object(qltk_fonts, "FONT_REPLACEMENTS_MARKER", marker),
+                  patch.object(qltk_fonts, "environment", return_value={}),
+                  patch.object(qltk_fonts.subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0, "ok")) as run):
+                qltk_fonts.install_wine_font_replacements()
+                self.assertTrue(marker.is_file())
+                self.assertEqual(run.call_count, 2)
+                labels = [call.args[0][5] for call in run.call_args_list]
+                self.assertEqual(labels, ["Segoe UI", "Microsoft Sans Serif"])
+                for call in run.call_args_list:
+                    args = call.args[0]
+                    self.assertEqual(args[0], str(wine))
+                    self.assertEqual(args[1:4], ["reg", "add", qltk_fonts.REGISTRY_KEY])
+                    self.assertEqual(args[4], "/v")
+                    self.assertEqual(args[6:12], ["/t", "REG_SZ", "/d", "DejaVu Sans", "/f"])
+                    self.assertEqual(call.kwargs["env"]["WINEARCH"], "win64")
+                qltk_fonts.install_wine_font_replacements()
+                self.assertEqual(run.call_count, 2)
 
     def test_mono_download_checksum_is_pinned(self):
         self.assertEqual(len(qltk_setup.MONO_SHA256), 64)
