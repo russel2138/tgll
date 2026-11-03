@@ -86,13 +86,19 @@ def find_display() -> tuple[int, str]:
 
 def release_number(env: dict) -> int | None:
     reg_key = r"HKLM\Software\Microsoft\NET Framework Setup\NDP\v4\Full"
-    cmd = [str(WINE), "reg", "query", reg_key, "/v", "Release"]
-    result = subprocess.run(cmd, env=env, cwd=GAME, capture_output=True,
-                            text=True, timeout=45, check=False)
-    if result.returncode:
-        return None
-    match = re.search(r"\bRelease\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)", result.stdout)
-    return int(match.group(1), 0) if match else None
+    values = []
+    # CLR 4.x installer can write a 64-bit or WOW6432Node registry view;
+    # inspect both rather than mistaking a successful install for failure.
+    for view in ((), ("/reg:32",)):
+        cmd = [str(WINE), "reg", "query", reg_key, "/v", "Release", *view]
+        result = subprocess.run(cmd, env=env, cwd=GAME, capture_output=True,
+                                text=True, timeout=45, check=False)
+        if result.returncode:
+            continue
+        match = re.search(r"\bRelease\s+REG_DWORD\s+(0x[0-9a-fA-F]+|\d+)", result.stdout)
+        if match:
+            values.append(int(match.group(1), 0))
+    return max(values) if values else None
 
 
 def install() -> None:
