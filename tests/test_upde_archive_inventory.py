@@ -44,6 +44,12 @@ def pe_summary(z, info):
 class ArchiveInventory(unittest.TestCase):
     def test_read_only_zip_inventory(self):
         self.assertTrue(ARCHIVE.is_file(), "Archive not found in repository")
+        import hashlib
+        hasher = hashlib.sha256()
+        with ARCHIVE.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024*1024), b""):
+                hasher.update(chunk)
+        print("ARCHIVE_SHA256:", hasher.hexdigest(), flush=True)
         print("\nARCHIVE:", ARCHIVE.name, "bytes:", ARCHIVE.stat().st_size, flush=True)
         with zipfile.ZipFile(ARCHIVE) as z:
             # Keep any account/credential files private. Only general instructions
