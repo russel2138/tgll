@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.2"
+VERSION = "2026.11.03.3"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
@@ -554,7 +554,7 @@ def handle(line):
             say("  setup game      Install selected game (ZIP or JAR)")
             if IS_ALTARE_AMD64:
                 say("  setup qltk      Install TiênnVo account manager + Wine Mono")
-                say("  qltk on|off     Launch TiênnVo QLTK together with game")
+                say("  qltk on|off     QLTK opens TiênnVo game when you click Login")
                 say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
                 say("  setup qltk-fonts   Fix Vietnamese Unicode font rendering")
             if IS_ALTARE_AMD64:
