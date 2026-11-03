@@ -26,6 +26,14 @@ class QltkIntegrationTest(unittest.TestCase):
         self.assertEqual(PROFILES["tiennvo"]["directory"], "game-tiennvo")
         self.assertEqual(len(TIENNVO_QLTK), 7)
 
+    def test_startup_owner_only_one_process(self):
+        # QLTK controls account login and launches the Unity EXE itself.
+        self.assertEqual(native_run.startup_owner("tiennvo", True), "qltk")
+        self.assertEqual(native_run.startup_owner("tiennvo", False), "game")
+        self.assertEqual(native_run.startup_owner("tgll", False), "game")
+        self.assertEqual(native_run.startup_owner("moddp250", True), "game")
+        self.assertEqual(native_run.startup_owner("jar", False), "game")
+
     def test_disabled_by_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(native_run, "QLTK_SETTINGS", Path(tmp) / "missing.json"):
