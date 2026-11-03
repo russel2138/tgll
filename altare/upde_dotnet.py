@@ -35,7 +35,7 @@ LOG = RUNTIME / "upde-dotnet48-install.log"
 CACHE = RUNTIME / "upde-dotnet-download-cache"
 WINETRICKS_COMMIT = "f3890f670867b5ffbc3938726db45c0f7d16c8ba"
 WINETRICKS_GIT_BLOB = "c166340f33c9af2bcc76a90618fdcf99d90c2253"
-WINETRICKS_SIZE = 873846
+WINETRICKS_MAX_BYTES = 2 * 1024 * 1024
 WINETRICKS_URL = ("https://raw.githubusercontent.com/Winetricks/winetricks/" +
                   WINETRICKS_COMMIT + "/src/winetricks")
 NETFX_RELEASE = 528040
@@ -54,7 +54,7 @@ def git_blob_sha1(raw: bytes) -> str:
 def fetch_winetricks() -> None:
     if RUNNER.is_file():
         raw = RUNNER.read_bytes()
-        if len(raw) == WINETRICKS_SIZE and git_blob_sha1(raw) == WINETRICKS_GIT_BLOB:
+        if len(raw) <= WINETRICKS_MAX_BYTES and git_blob_sha1(raw) == WINETRICKS_GIT_BLOB:
             return
     RUNNER.parent.mkdir(parents=True, exist_ok=True)
     say("Downloading verified Winetricks script from pinned upstream Git commit")
@@ -62,8 +62,8 @@ def fetch_winetricks() -> None:
     with urlopen(request, timeout=90) as response:
         if not response.geturl().startswith("https://"):
             raise RuntimeError("Winetricks redirected to non-HTTPS URL")
-        raw = response.read(WINETRICKS_SIZE + 1)
-    if len(raw) != WINETRICKS_SIZE or git_blob_sha1(raw) != WINETRICKS_GIT_BLOB:
+        raw = response.read(WINETRICKS_MAX_BYTES + 1)
+    if len(raw) > WINETRICKS_MAX_BYTES or git_blob_sha1(raw) != WINETRICKS_GIT_BLOB:
         raise RuntimeError("Winetricks source checksum mismatch; refusing to execute")
     with tempfile.NamedTemporaryFile(dir=RUNNER.parent, prefix=".winetricks-",
                                      delete=False) as file:
