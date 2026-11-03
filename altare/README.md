@@ -115,3 +115,62 @@ Khi chạy với SOCKS5 lần đầu, runtime sẽ tự tải hai gói Debian `p
 **Giới hạn quan trọng:** ProxyChains-NG dùng hook libc và chỉ áp dụng cho TCP; không bảo đảm mọi kết nối của Wine/Unity đều đi qua SOCKS5. Xác minh lưu lượng bằng log hoặc Activity của nhà cung cấp proxy trước khi tin tưởng. Kết nối loopback `127.0.0.1` được giữ local cho giao tiếp nội bộ. Mật khẩu nhập vào console có thể vẫn được panel lưu trong lịch sử lệnh hoặc ghi lại trong giao diện, dù launcher không ghi lại.
 
 Chạy thử trên Altare và theo dõi `logs 100`, `status`, `mem`. Không bảo đảm FPS hay độ ổn định của Unity trên phần mềm render CPU trước khi kiểm thử.
+
+## Cài NRO TiênnVo + QLTK.exe trên Altare (một phiên Wine/VNC)
+
+QLTK là chương trình .NET Framework 4.8 32-bit, tách biệt với Unity IL2CPP 64-bit. Dùng Wine WOW64 bản native AMD64, không dùng Box64 và không cài toàn bộ Windows.
+
+Upload **ZIP TiênnVo gốc** vào `/home/container/`, nên đổi tên thành `tiennvo.zip`. ZIP của TiênnVo đặt password `123` cho bảy file QLTK AES, còn phần Unity game không mã hóa.
+
+Console:
+
+```text
+stop
+update
+game-select tiennvo
+setup native
+setup game
+setup qltk
+logs 100
+```
+
+- Nếu đã chạy `setup native` thành công trước đó thì không cần chạy lại
+- Chờ `setup game` hoàn thành rồi mới nhập `setup qltk`, không chạy hai job song song
+- `setup qltk` cài 7-Zip từ Debian vào private prefix không cần root, giải mã riêng đúng bảy file QLTK bằng password ZIP công khai `123` và giữ các file Unity/RMS/TGLL hiện tại
+- `setup qltk` tải **Wine Mono 11.3.0** từ GitHub release và xác thực SHA256, sau đó cài MSI vào prefix TiênnVo riêng (có Xvfb tạm khi cài). Mục đích là hỗ trợ .NET Framework 4.8/WinForms mà chưa cần cài .NET 4.8 chính thức
+- Hoàn tất mới đánh dấu `qltk on`. Không tự chạy `QLTK.exe` trong bước setup
+
+Sau setup, chạy bình thường:
+
+```text
+start
+```
+
+Hoặc sử dụng SOCKS5:
+
+```text
+start 1.2.3.4:1080
+start 1.2.3.4:1080:user:pass
+```
+
+`start` sẽ mở **game Unity + QLTK** trên cùng Wine prefix/display/VNC. Game vẫn dùng 400×340 (trừ khi bạn đổi `resolution`), nhưng desktop VNC mở rộng tối thiểu 800×600 để nhìn được cửa sổ QLTK. SOCKS5 TCP qua ProxyChains được áp dụng cho cả game và QLTK nếu bạn truyền proxy; localhost `127.0.0.1` được giữ local cho giao tiếp giữa hai chương trình.
+
+Có thể tạm không mở QLTK:
+
+```text
+stop
+qltk off
+start
+```
+
+Bật lại:
+
+```text
+stop
+qltk on
+start
+```
+
+QLTK **không được bảo đảm hoạt động** trên Wine Mono: UI Guna/WinForms, login/license hoặc tương tác socket phụ thuộc vào mã nguồn mod và khả năng tương thích thực tế. Nếu QLTK đóng hoặc không hiện trong VNC, hãy xem `status` rồi `bash tail -n 100 .tgll-runtime/game-live-qltk.log`; game không bị dừng chỉ vì QLTK tự thoát. Nếu thiếu API .NET, đánh giá log trước khi cân nhắc .NET 4.8 thật; không cài bổ sung tự động.
+
+**Lưu ý bảo mật:** ZIP/EXE là phần mềm bên thứ ba chưa được xác minh hoàn toàn; tránh tài khoản chính khi thử. VNC không mã hóa, không đăng mật khẩu proxy/game lên GitHub; mật khẩu proxy gõ vào panel có thể còn trong lịch sử của nhà cung cấp. Kiểm tra CPU/RAM và điều khoản Altare trước khi treo 24/7.
