@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.10.31.1"
+VERSION = "2026.11.03.1"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/qltk_setup.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -533,7 +533,7 @@ def handle(line):
     if cmd in ("help", "?"):
         if arg.strip().lower() in ("advanced", "setup"):
             say("Maintenance (not needed for daily VPS use):")
-            say("  setup [native|jar|game|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
+            say("  setup [native|jar|game|qltk|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
             say("  launcher-status | launcher-restart | job | job-stop")
             say("  game-screenshot | bash [command] | bash | quit")
             say("  Tip: launcher stays online after stopping the game.")
@@ -552,6 +552,9 @@ def handle(line):
             say("  resolution 800x600 | 960x720   Set internal game resolution")
             say("  vnc-scale on|off   Fit full game into 640x480 VNC view")
             say("  setup game      Install selected game (ZIP or JAR)")
+            if IS_ALTARE_AMD64:
+                say("  setup qltk      Install TiênnVo account manager + Wine Mono")
+                say("  qltk on|off     Launch TiênnVo QLTK together with game")
             if IS_ALTARE_AMD64:
                 say("  setup native    Install Altare amd64 Wine + Xvfb + VNC (no Box64)")
                 say("  setup jar       Install Java 17 + MicroEmulator + display (no Wine)")
@@ -665,15 +668,22 @@ def handle(line):
             "wine-diagnose": ("wine-diagnose", "install_wine.py", ("--diagnose",)),
             "native": ("altare-native-setup", "native_setup.py", ()),
             "jar": ("altare-jar-setup", "jar_setup.py", ()),
+            "qltk": ("altare-qltk-setup", "qltk_setup.py", ()),
         }
         if action not in jobs:
-            say("Usage: setup [box64|wine|display|graphics|vnc|game|test-game|test-graphics|wine-diagnose]")
+            say("Usage: setup [native|jar|game|qltk|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
         else:
             if action == "jar" or (action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "jar"):
                 if not IS_ALTARE_AMD64:
                     say("Java ME mode requires Altare x86_64")
                     return
                 launch_job("altare-jar-setup", ROOT / "altare" / "jar_setup.py")
+            elif action == "qltk":
+                from scripts.game_profiles import selected_key
+                if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
+                    say("setup qltk requires Altare x86_64 with game-select tiennvo")
+                    return
+                launch_job("altare-qltk-setup", ROOT / "altare" / "qltk_setup.py")
             elif action == "native":
                 if not IS_ALTARE_AMD64:
                     say("setup native only supports Linux x86_64")
@@ -716,6 +726,37 @@ def handle(line):
                 say(f"VNC info failed (exit {result.returncode})")
     elif cmd == "vnc-public":
         vnc_options(arg)
+    elif cmd == "qltk":
+        from scripts.game_profiles import selected_key
+        if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
+            say("QLTK control is only for TiênnVo EXE on Altare x86_64")
+            return
+        file = RUNTIME / "tiennvo-qltk.json"
+        option = arg.strip().lower()
+        if option not in ("on", "off"):
+            enabled = False
+            if file.is_file():
+                try:
+                    enabled = bool(json.loads(file.read_text()).get("enabled", False))
+                except (OSError, ValueError):
+                    pass
+            say("QLTK: " + ("on" if enabled else "off") + " (use qltk on|off)")
+            return
+        if (job_info() or {}).get("running"):
+            say("Stop the active game before toggling QLTK")
+            return
+        if option == "on" and not (ROOT / "game-tiennvo/QLTK.exe").is_file():
+            say("QLTK not installed; run setup qltk first")
+            return
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        tmp = file.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps({"enabled": option == "on"}), encoding="utf-8")
+            tmp.chmod(0o600)
+            tmp.replace(file)
+        finally:
+            tmp.unlink(missing_ok=True)
+        say("QLTK " + option + "; next start will apply this setting")
     elif cmd == "game-autostart":
         enabled_file = RUNTIME / "game-autostart.json"
         if arg not in ("on", "off"):
