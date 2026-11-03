@@ -245,3 +245,41 @@ start
 ```
 
 **Bấm Login trong QLTK, không cần tự mở game thứ hai.** Khi cần chẩn đoán màn đen của *game được mở bởi QLTK*, xem log `game-live-qltk.log` và Player.log mà Unity tự ghi trong Wine prefix. Lưu ý tham số `-screen-width`/ `-logFile` chỉ có ở chế độ `qltk off` vì QLTK kiểm soát tham số khi khởi chạy game.
+
+## Chẩn đoán WineD3D black screen/page fault khi QLTK mở Unity
+
+Nếu crash stack có `wined3d` → `d3d11` → `UnityPlayer` hoặc game hiển thị đen sau Login, không mặc định coi là lỗi CPU/RAM hay tài khoản. Giữ nguyên game, QLTK, Wine prefix và font. Không tự thêm hoặc xóa `csmt` Registry (người dùng có thể đã hoàn tác thử nghiệm trước đó).
+
+Sau `stop` và `update`, phiên mặc định:
+
+```text
+graphics default
+qltk on
+start
+```
+
+Sau đó bấm **Login** trong QLTK. Nếu màn hình vẫn đen, dừng phiên rồi thử một chế độ WineD3D khác có thể **truyền xuống tiến trình Unity do QLTK tạo**:
+
+```text
+stop
+graphics glsl-vkd3d
+qltk on
+start
+```
+
+`glsl-vkd3d` dùng `WINE_D3D_CONFIG=shader_backend=glsl-vkd3d`, được các nhánh Wine 11 gần đây hỗ trợ. Nó là phương án thử nghiệm thay đổi shader compiler, **không bảo đảm sửa lỗi và có thể làm game chậm/crash**. Cả QLTK lẫn game con kế thừa biến môi trường này. Nếu không hiệu quả, trả về `stop` → `graphics default`.
+
+Các chế độ Unity trực tiếp, không thể truyền qua QLTK (vì QLTK tự tạo command-line cho game):
+
+```text
+stop
+qltk off
+graphics bitblt
+start
+```
+
+Đổi `graphics bitblt` thành `graphics glcore` hoặc `graphics singlethread` để thử lần lượt. Đó là cờ Unity chính thức `-force-d3d11-bitblt-model`, `-force-glcore` và `-force-d3d11-singlethreaded`. Chế độ này có thể kiểm chứng renderer, nhưng không thay thế quy trình Login qua QLTK. Đổi về `graphics default` trước khi bật lại QLTK.
+
+Lệnh `graphics` không có đối số hiển thị mode hiện tại. Mode được lưu cục bộ ở `.tgll-runtime/tiennvo-graphics.json` (không lưu tài khoản/password), chỉ có hiệu lực khi `start` phiên mới. `status` có `graphics_mode`. Không có bước nào đụng tới `HKCU\\Software\\Wine\\Direct3D\\csmt`.
+
+Nếu game vẫn đen/crash, giữ log QLTK và Player.log mới; đặc biệt tìm lỗi `Unhandled exception`, `wined3d`, `d3d11`, `dxgi`. Lưu ý lỗi `BaseLib` assembly .NET của QLTK khác với `baselib.dll` native Unity. Không tải DLL từ nguồn không đáng tin.
