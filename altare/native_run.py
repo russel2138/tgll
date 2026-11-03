@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import current_game, selected_key
 from proxy_launch import check_socks5, proxychains_config
 from qltk_fonts import FONTS_CONFIG
+from graphics_modes import read_mode, configure_environment
 
 PROFILE = current_game()
 GAME = ROOT / PROFILE["directory"]
@@ -39,6 +40,7 @@ QLTK_LOG = RUNTIME / "game-live-qltk.log"
 QLTK_SETTINGS = RUNTIME / "tiennvo-qltk.json"
 QLTK_DISPLAY_SETTINGS = RUNTIME / "tiennvo-qltk-display.json"
 QLTK_MONO_MARKER = WINEPREFIX / ".wine-mono-11.3.0.ok"
+GRAPHICS_SETTINGS = RUNTIME / "tiennvo-graphics.json"
 PROXYCHAINS = PKGROOT / "usr/bin/proxychains4"
 PROXY_LIBRARY = PKGROOT / "usr/lib/x86_64-linux-gnu/libproxychains.so.4"
 
@@ -251,6 +253,12 @@ def main():
     env_wine["WINEDEBUG"] = "-all,err+all"
     env_wine["WINEESYNC"] = "0"
     env_wine["WINEFSYNC"] = "0"
+    graphics_mode = read_mode(GRAPHICS_SETTINGS) if selected_key() == "tiennvo" else "default"
+    if selected_key() == "tiennvo":
+        unity_flags = configure_environment(env_wine, graphics_mode, use_qltk)
+        log(f"TiênnVo graphics: {graphics_mode} (QLTK owns launch: {use_qltk})")
+    else:
+        unity_flags = ()
     if use_qltk and FONTS_CONFIG.is_file():
         env_wine["FONTCONFIG_FILE"] = str(FONTS_CONFIG)
     vnc_scale = bool(settings.get("scale", False)) and (desktop_width > 640 or desktop_height > 480)
@@ -289,6 +297,7 @@ def main():
         else:
             args = [str(WINE), str(EXE), "-screen-fullscreen", "0",
                     "-screen-width", str(width), "-screen-height", str(height)]
+            args.extend(unity_flags)
             if os.environ.get("GAME_UNITY_LOG") == "0":
                 args.append("-nolog")
             else:
@@ -303,6 +312,7 @@ def main():
             "vnc_resolution": "640x480" if vnc_scale else f"{desktop_width}x{desktop_height}",
             "game": PROFILE["name"], "game_pid": game.pid if game else None,
             "launch_owner": owner, "vnc_pid": vnc.pid,
+            "graphics_mode": graphics_mode,
             "qltk_enabled": use_qltk, "qltk_pid": qltk.pid if qltk else None,
             "display_resolution": f"{desktop_width}x{desktop_height}",
             "proxy_mode": "socks5" if proxy else "direct",
