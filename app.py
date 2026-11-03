@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.5"
+VERSION = "2026.11.03.6"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/upde_runtime.py", "altare/upde_dotnet.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -555,6 +555,8 @@ def handle(line):
             if IS_ALTARE_AMD64:
                 say("  setup qltk      Install TiênnVo account manager + Wine Mono")
                 say("  game-select upde | setup game    Install new Up Đệ Basic from GitHub ZIP")
+                say("  setup upde-dotnet  Test native Microsoft .NET 4.8 in separate Wine prefix")
+                say("  upde-runtime mono|netfx   Select Up Đệ .NET runtime (stop first)")
                 say("  qltk on|off     QLTK opens TiênnVo game when you click Login")
                 say("  graphics [default|glsl-vkd3d|bitblt|glcore|singlethread]")
                 say("  qltk-display WIDTHxHEIGHT   Change QLTK VNC desktop (default 1280x800)")
@@ -674,6 +676,7 @@ def handle(line):
             "jar": ("altare-jar-setup", "jar_setup.py", ()),
             "qltk": ("altare-qltk-setup", "qltk_setup.py", ()),
             "qltk-fonts": ("altare-qltk-fonts", "qltk_fonts.py", ()),
+            "upde-dotnet": ("altare-upde-dotnet", "upde_dotnet.py", ()),
         }
         if action not in jobs:
             say("Usage: setup [native|jar|game|qltk|qltk-fonts|box64|wine|display|graphics|vnc|test-game|test-graphics|wine-diagnose]")
@@ -688,6 +691,12 @@ def handle(line):
                     say("Up Đệ Basic requires Altare x86_64")
                     return
                 launch_job("altare-upde-setup", ROOT / "altare" / "upde_setup.py")
+            elif action == "upde-dotnet":
+                from scripts.game_profiles import selected_key
+                if not IS_ALTARE_AMD64 or selected_key() != "upde":
+                    say("setup upde-dotnet requires game-select upde on Altare x86_64")
+                    return
+                launch_job("altare-upde-dotnet", ROOT / "altare" / "upde_dotnet.py")
             elif action == "qltk-fonts":
                 from scripts.game_profiles import selected_key
                 if not IS_ALTARE_AMD64 or selected_key() != "tiennvo":
@@ -825,6 +834,41 @@ def handle(line):
         finally:
             temp.unlink(missing_ok=True)
         say(f"TiênnVo graphics = {requested}; next start will apply, CSMT registry unchanged")
+    elif cmd == "upde-runtime":
+        from scripts.game_profiles import selected_key
+        if not IS_ALTARE_AMD64 or selected_key() != "upde":
+            say("upde-runtime requires game-select upde on Altare x86_64")
+            return
+        import sys as _sys
+        module_dir = str(ROOT / "altare")
+        if module_dir not in _sys.path:
+            _sys.path.insert(0, module_dir)
+        from upde_runtime import MODES, FILE_NAME, marker_for, mode_from_file
+        chosen = arg.strip().lower()
+        if not chosen:
+            say("Up Đệ runtime: " + mode_from_file(RUNTIME))
+            say("Usage: upde-runtime mono | netfx")
+            return
+        if chosen not in MODES:
+            say("Usage: upde-runtime mono | netfx")
+            return
+        if (job_info() or {}).get("running"):
+            say("Stop the active game/job before changing runtime")
+            return
+        if not marker_for(RUNTIME, chosen).is_file():
+            say("Runtime not installed: " + chosen +
+                ("; run setup upde-dotnet first" if chosen == "netfx" else "; run setup game first"))
+            return
+        RUNTIME.mkdir(parents=True, exist_ok=True)
+        config_file = RUNTIME / FILE_NAME
+        temp = config_file.with_suffix(".tmp")
+        try:
+            temp.write_text(json.dumps({"runtime": chosen}), encoding="utf-8")
+            temp.chmod(0o600)
+            temp.replace(config_file)
+        finally:
+            temp.unlink(missing_ok=True)
+        say(f"Up Đệ runtime selected: {chosen}; next start will apply")
     elif cmd == "qltk":
         from scripts.game_profiles import selected_key
         if not IS_ALTARE_AMD64 or selected_key() not in ("tiennvo", "upde"):
@@ -847,7 +891,7 @@ def handle(line):
         if option == "on" and not (ROOT / ("game-upde" if selected_key() == "upde" else "game-tiennvo") / "QLTK.exe").is_file():
             say("QLTK not installed; run setup qltk first")
             return
-        if option == "on":
+        if option == "on" and selected_key() == "tiennvo":
             import sys as _sys
             folder = str(ROOT / "altare")
             if folder not in _sys.path:
