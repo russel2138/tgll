@@ -415,3 +415,51 @@ start
 ```
 
 Việc sửa font **không giải quyết lỗi Wine Mono `Unknown heap type: #VMData`**, và không bảo đảm sửa glyph tùy biến của Guna UI. Nếu QLTK .NET 4.8 vẫn chưa mở được hoặc font vẫn sai, xem `game-live-qltk.log` hoặc gửi ảnh VNC mới.
+
+
+## NRO EMULATOR V2 — Java desktop chạy trực tiếp trên Linux (Altare)
+
+Nguồn là ZIP người dùng đã commit vào \`main\`: \`NRO EMULATOR V2.zip\` (79,035,404 bytes), commit \`01c610bb91c09a23a54e194e92edf602d6f8864f\`, SHA-256 \`36296b7b569e64ac254cb4823c6574998500392027e828400d12dac8cd59314f\`.
+
+Đã kiểm tra tĩnh:
+- \`NRO EMULATOR.exe\` là Launch4j Windows wrapper của **một executable JAR nhúng**, không phải ứng dụng C#/Unity
+- Manifest: \`Main-Class: com.dragonboy.desktop.DesktopLauncher\`, 3.812 entry với các native Linux x64 libGDX/LWJGL3/GLFW
+- \`jre/\` trong ZIP là **Windows Java 21** nên **không** được dùng như Linux JRE
+- Đây là Java **desktop** (libGDX/LWJGL3), **không** phải Java ME; không mở qua MicroEmulator, không cần Wine/Box64/.NET
+
+### Chạy thử
+
+\`\`\`text
+stop
+update
+game-select nroemu
+setup game
+logs 80
+\`\`\`
+
+Sau khi setup báo \`SUCCESS: NRO Emulator V2 JAR ready\`:
+
+\`\`\`text
+start
+logs 50
+\`\`\`
+
+Kết nối TigerVNC tại port đã cấu hình. Desktop mặc định 1280x800. \`stop\` tắt cả Java app và TigerVNC, launcher Python tiếp tục chạy nền trong hosting Console.
+
+Bộ setup chỉ tải ZIP từ commit cố định, xác minh SHA-256, đọc EXE bằng Python \`zipfile\` như một archive Launch4j, rồi **đóng gói lại JAR** trong \`.tgll-runtime/nroemu/nro-emulator-v2.jar\`. Không thực thi EXE, không thay đổi dữ liệu tài khoản hay chạm vào các prefix Wine. Cache/tài liệu của app ở \`.tgll-runtime/nroemu/home\`.
+
+Java: ưu tiên Linux Java 17 sẵn có ở \`.tgll-runtime/jar-runtime/java17/bin/java\`, nếu không có thì thử Java đã cài trong PATH (phiên bản >=17). Nếu thiếu, chạy \`setup jar\` như thông thường để tạo JRE 17 trước. NRO Emulator V2 không sử dụng Java ME MicroEmulator dù dùng chung bộ JRE.
+
+Lấy lỗi sau khi chạy:
+
+\`\`\`text
+logs 80
+bash tail -n 100 .tgll-runtime/nroemu-game.log
+bash tail -n 60 .tgll-runtime/jar-tigervnc.log
+\`\`\`
+
+Chế độ phần mềm Mesa LLVMpipe render đồ họa bằng CPU. Đây là thử nghiệm tương thích, **chưa được kiểm tra hiệu năng game thực trên Altare**. Nếu xuất hiện lỗi OpenGL/GLFW hoặc tiêu thụ CPU cao, không cố treo 24/7 trước khi xem log. VNC password hiện không mã hóa luồng truyền (nếu cần bảo mật, dùng kết nối riêng/SSH tunnel theo khả năng hosting). Không cần proxy.
+
+### Không xóa dữ liệu cũ
+
+Hiện tại giữ nguyên các profile Java ME và Up Đệ đang hoạt động. Các profile TGLL/TiênnVo cũ có thể dọn sau khi xác nhận NRO Emulator V2 chạy đúng, **không xóa thư mục game, tài khoản, RMS hoặc Wine prefix** trên Altare trong bước triển khai thử này. Rollback: \`stop\` → \`game-select upde\` hoặc \`game-select jar\` → \`start\`.
