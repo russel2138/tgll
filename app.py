@@ -18,12 +18,12 @@ import time
 import urllib.error
 import urllib.request
 
-VERSION = "2026.11.03.7"
+VERSION = "2026.11.04.1"
 ROOT = Path(__file__).resolve().parent
 IS_ALTARE_AMD64 = (platform.machine().lower() in ("x86_64", "amd64"))
 RUNTIME = ROOT / ".tgll-runtime"
 JOB_FILE = RUNTIME / "job.json"
-MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/upde_runtime.py", "altare/upde_dotnet.py", "altare/upde_fonts.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
+MANAGED_FILES = ("app.py", "main.py", "scripts/install_box64.py", "scripts/install_wine.py", "scripts/install_x86_libs.py", "scripts/install_display.py", "scripts/test_graphics.py", "scripts/install_game.py", "scripts/game_profiles.py", "scripts/proxy_launch.py", "scripts/install_graphics_libs.py", "scripts/test_game.py", "scripts/capture_game_screen.py", "scripts/install_vnc.py", "scripts/run_game.py", "scripts/vnc_info.py", "altare/native_setup.py", "altare/native_run.py", "altare/upde_setup.py", "altare/upde_runtime.py", "altare/upde_dotnet.py", "altare/upde_fonts.py", "altare/graphics_modes.py", "altare/qltk_setup.py", "altare/qltk_fonts.py", "altare/jar_setup.py", "altare/jar_run.py", "altare/jar_selection.py", "altare/nroemu_setup.py", "altare/nroemu_run.py", "altare/jar_tigervnc.py", "altare/JAR.md", "altare/README.md", "README.md")
 RAW_BASE = "https://raw.githubusercontent.com/russel2138/tgll/main/"
 COMMANDS: queue.Queue[str] = queue.Queue()
 SHELL_MODE = False
@@ -377,6 +377,10 @@ def vnc_options(line):
 
 def selected_runner():
     from scripts.game_profiles import selected_key
+    if selected_key() == "nroemu":
+        if not IS_ALTARE_AMD64:
+            raise ValueError("NRO Emulator V2 Linux Java requires x86_64 Altare")
+        return ROOT / "altare" / "nroemu_run.py"
     if selected_key() == "jar":
         if not IS_ALTARE_AMD64:
             raise ValueError("Java ME JAR mode is only configured for Altare x86_64")
@@ -396,8 +400,8 @@ def launch_selected_game(proxy_arg="", reuse_previous=False):
         if proc:
             ACTIVE_PROXY = None
         return
-    if not IS_ALTARE_AMD64 or selected_key() == "jar":
-        say("SOCKS5 inline mode is only for Altare x86_64 Windows EXE games")
+    if not IS_ALTARE_AMD64 or selected_key() in ("jar", "nroemu"):
+        say("Proxy arguments are not supported by Linux Java profiles; run 'start' directly")
         return
     from scripts.proxy_launch import parse_proxy
     try:
@@ -544,7 +548,8 @@ def handle(line):
             say("  restart [ip:port[:user:pass]]  Reuse current SOCKS5 if omitted")
             say("  status          Game/VNC status and RAM")
             say("  vnc-info        Show TigerVNC address and locally saved password")
-            say("  game-select jar|tgll|moddp250|tiennvo|upde   Switch game (stop first)")
+            say("  game-select nroemu|jar|upde|tgll|moddp250|tiennvo   Switch game (stop first)")
+            say("  game-select nroemu | setup game | start   Linux desktop Java (no Wine)")
             if IS_ALTARE_AMD64:
                 say("  list            List uploaded Java ME games/emulators")
                 say("  jar-select stock game.jar   Select Java ME pair after stop")
@@ -581,9 +586,9 @@ def handle(line):
         if not choice:
             current = selected_key()
             say(f"Selected game: {current} ({PROFILES[current]['name']})")
-            say("Use: game-select jar | tgll | moddp250 | tiennvo | upde")
+            say("Use: game-select nroemu | jar | upde | tgll | moddp250 | tiennvo")
         elif choice not in PROFILES:
-            say("Use: game-select jar | tgll | moddp250 | tiennvo | upde")
+            say("Use: game-select nroemu | jar | upde | tgll | moddp250 | tiennvo")
         elif (job_info() or {}).get("running"):
             say("Stop the active game/job before switching: stop or job-stop")
         else:
@@ -595,12 +600,16 @@ def handle(line):
                 temp.replace(SELECTION_FILE)
             finally:
                 temp.unlink(missing_ok=True)
-            say(f"Selected {PROFILES[choice]['name']}; run 'setup jar' for Java ME or 'setup game' for Windows, then 'start'")
+            say(f"Selected {PROFILES[choice]['name']}; run 'setup game' for NRO Emulator, "
+                "'setup jar' for Java ME or 'setup game' for Windows, then 'start'")
     elif cmd == "resolution":
         from scripts.game_profiles import selected_key
         game_key = selected_key()
         cfg_path = RUNTIME / "game-resolutions.json"
         defaults = {"moddp250": [800, 600], "tgll": [640, 480], "tiennvo": [400, 340], "upde": [400, 340]}
+        if game_key == "nroemu":
+            say("NRO Emulator uses a fixed 1280x800 TigerVNC desktop; resolution is not configurable yet")
+            return
         if game_key == "jar":
             say("Java ME display is fixed at 400x340 (game 400x300); resolution is for Windows games only")
             return
@@ -688,6 +697,11 @@ def handle(line):
                     say("Java ME mode requires Altare x86_64")
                     return
                 launch_job("altare-jar-setup", ROOT / "altare" / "jar_setup.py")
+            elif action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "nroemu":
+                if not IS_ALTARE_AMD64:
+                    say("NRO Emulator V2 requires Altare Linux x86_64")
+                    return
+                launch_job("altare-nroemu-setup", ROOT / "altare" / "nroemu_setup.py")
             elif action == "game" and __import__("scripts.game_profiles", fromlist=["selected_key"]).selected_key() == "upde":
                 if not IS_ALTARE_AMD64:
                     say("Up Đệ Basic requires Altare x86_64")
