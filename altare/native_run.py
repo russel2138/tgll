@@ -23,13 +23,14 @@ from game_profiles import current_game, selected_key
 from proxy_launch import check_socks5, proxychains_config
 from qltk_fonts import FONTS_CONFIG
 from graphics_modes import read_mode, configure_environment
+from upde_runtime import mode_from_file as upde_runtime_mode, prefix_for as selected_prefix, marker_for as upde_runtime_marker
 
 PROFILE = current_game()
 GAME = ROOT / PROFILE["directory"]
 EXE = GAME / PROFILE["exe"]
 WINE = RUNTIME / "wine/bin/wine"
 WINESERVER = RUNTIME / "wine/bin/wineserver"
-WINEPREFIX = RUNTIME / ("altare-" + PROFILE["wineprefix"])
+WINEPREFIX = selected_prefix(RUNTIME, PROFILE, selected_key())
 SESSION_FILE = RUNTIME / "game-session.json"
 VNC_SETTINGS = RUNTIME / "vnc-settings.json"
 UNITY_LOG = RUNTIME / ("game-live-" + PROFILE["name"] + "-Player.log")
@@ -229,7 +230,9 @@ def validate():
     if PASSWD.stat().st_mode & 0o077:
         raise RuntimeError("VNC password permissions are not private (expected 0600)")
     if qltk_enabled():
-        for path in (GAME / "QLTK.exe", GAME / "QLTK.exe.config", QLTK_MONO_MARKER):
+        runtime_marker = (upde_runtime_marker(RUNTIME, upde_runtime_mode(RUNTIME))
+                          if selected_key() == "upde" else QLTK_MONO_MARKER)
+        for path in (GAME / "QLTK.exe", GAME / "QLTK.exe.config", runtime_marker):
             if not path.is_file():
                 raise RuntimeError("QLTK not ready; run setup qltk: missing " + str(path))
 
@@ -248,6 +251,8 @@ def main():
         raise RuntimeError("Resolution out of supported range")
     log(f"Native x86_64 Wine (no Box64): {PROFILE['name']} at {width}x{height}")
     log(f"QLTK: {'enabled' if use_qltk else 'disabled'}; VNC desktop {desktop_width}x{desktop_height}")
+    if selected_key() == "upde":
+        log(f"Up Đệ .NET runtime: {upde_runtime_mode(RUNTIME)}; prefix={WINEPREFIX.name}")
     log(f"VNC port={port} bind={'0.0.0.0' if public else '127.0.0.1'}")
     if public:
         log("WARNING: VNC password does not encrypt traffic; use private networking if available")
@@ -319,6 +324,7 @@ def main():
             "vnc_resolution": "640x480" if vnc_scale else f"{desktop_width}x{desktop_height}",
             "game": PROFILE["name"], "game_pid": game.pid if game else None,
             "launch_owner": owner, "vnc_pid": vnc.pid,
+            "upde_runtime": upde_runtime_mode(RUNTIME) if selected_key() == "upde" else None,
             "graphics_mode": graphics_mode,
             "qltk_enabled": use_qltk, "qltk_pid": qltk.pid if qltk else None,
             "display_resolution": f"{desktop_width}x{desktop_height}",
