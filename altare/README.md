@@ -153,7 +153,7 @@ start 1.2.3.4:1080
 start 1.2.3.4:1080:user:pass
 ```
 
-`start` sẽ mở **game Unity + QLTK** trên cùng Wine prefix/display/VNC. Game vẫn dùng 400×340 (trừ khi bạn đổi `resolution`), nhưng desktop VNC mở rộng tối thiểu 800×600 để nhìn được cửa sổ QLTK. SOCKS5 TCP qua ProxyChains được áp dụng cho cả game và QLTK nếu bạn truyền proxy; localhost `127.0.0.1` được giữ local cho giao tiếp giữa hai chương trình.
+`start` sẽ mở **game Unity + QLTK** trên cùng Wine prefix/display/VNC. Game vẫn dùng 400×340 (trừ khi bạn đổi `resolution`), nhưng desktop VNC mở rộng mặc định lên 1280×800 để nhìn trọn cửa sổ QLTK. SOCKS5 TCP qua ProxyChains được áp dụng cho cả game và QLTK nếu bạn truyền proxy; localhost `127.0.0.1` được giữ local cho giao tiếp giữa hai chương trình.
 
 Có thể tạm không mở QLTK:
 
@@ -174,3 +174,35 @@ start
 QLTK **không được bảo đảm hoạt động** trên Wine Mono: UI Guna/WinForms, login/license hoặc tương tác socket phụ thuộc vào mã nguồn mod và khả năng tương thích thực tế. Nếu QLTK đóng hoặc không hiện trong VNC, hãy xem `status` rồi `bash tail -n 100 .tgll-runtime/game-live-qltk.log`; game không bị dừng chỉ vì QLTK tự thoát. Nếu thiếu API .NET, đánh giá log trước khi cân nhắc .NET 4.8 thật; không cài bổ sung tự động.
 
 **Lưu ý bảo mật:** ZIP/EXE là phần mềm bên thứ ba chưa được xác minh hoàn toàn; tránh tài khoản chính khi thử. VNC không mã hóa, không đăng mật khẩu proxy/game lên GitHub; mật khẩu proxy gõ vào panel có thể còn trong lịch sử của nhà cung cấp. Kiểm tra CPU/RAM và điều khoản Altare trước khi treo 24/7.
+
+## QLTK bị cắt cạnh phải hoặc lỗi dấu tiếng Việt trong Wine
+
+Các phiên bản trước chỉ dùng desktop 800×600 cho QLTK. WinForms/Guna UI TiênnVo có thể lớn hơn màn hình này, làm cắt nút phía phải và phía dưới. Từ bản cập nhật này:
+
+- Khi bật QLTK, **desktop VNC mặc định 1280×800**; game Unity vẫn dùng độ phân giải đã chọn (mặc định 400×340), không tăng kích thước render game
+- Khi tắt QLTK, màn hình nhỏ của game vẫn được sử dụng như trước
+- Có thể chỉnh riêng desktop QLTK (ví dụ `qltk-display 1440x900`), không sử dụng lệnh `resolution` để sửa lỗi bị cắt vì lệnh đó điều chỉnh cả game
+- Font DejaVu Sans được cài **rootless** từ gói Debian đã xác minh SHA256 vào Wine prefix TiênnVo; không động đến các Wine prefix khác. Wine fontconfig được ưu tiên font Unicode cho Tahoma, Arial, Segoe UI, Microsoft Sans Serif
+- Do Guna UI có thể dùng font tùy biến hoặc bản thân nội dung thiếu glyph, việc cài font **có thể không xử lý hết** các ô vuông; cần ảnh/log sau khi chạy để xác minh
+
+Nếu QLTK đã được cài và đang mở nhưng giao diện bị cắt, chạy từng lệnh sau:
+
+```text
+stop
+update
+setup qltk-fonts
+logs 60
+vnc-scale off
+start
+```
+
+Chờ `setup qltk-fonts` kết thúc trước khi dùng `start`. Kết nối VNC lại sau khi restart để VNC Viewer nhận màn hình mới. Nếu muốn kiểm tra hoặc đổi kích thước:
+
+```text
+qltk-display
+stop
+qltk-display 1440x900
+start
+```
+
+Trong VNC viewer có thể bật fit-to-screen hoặc cuộn để quan sát toàn bộ màn hình. `vnc-scale on` trên Altare có thể thu nhỏ 1280×800 xuống 640×480, phù hợp xem toàn cảnh nhưng chữ sẽ nhỏ. Không cần đổi cổng, mật khẩu VNC, dữ liệu tài khoản hoặc cài lại `setup qltk`.

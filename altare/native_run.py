@@ -21,6 +21,7 @@ from native_setup import (
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import current_game, selected_key
 from proxy_launch import check_socks5, proxychains_config
+from qltk_fonts import FONTS_CONFIG
 
 PROFILE = current_game()
 GAME = ROOT / PROFILE["directory"]
@@ -36,6 +37,7 @@ XVFB_LOG = RUNTIME / "game-live-xvfb.log"
 VNC_LOG = RUNTIME / "game-live-vnc.log"
 QLTK_LOG = RUNTIME / "game-live-qltk.log"
 QLTK_SETTINGS = RUNTIME / "tiennvo-qltk.json"
+QLTK_DISPLAY_SETTINGS = RUNTIME / "tiennvo-qltk-display.json"
 QLTK_MONO_MARKER = WINEPREFIX / ".wine-mono-11.3.0.ok"
 PROXYCHAINS = PKGROOT / "usr/bin/proxychains4"
 PROXY_LIBRARY = PKGROOT / "usr/lib/x86_64-linux-gnu/libproxychains.so.4"
@@ -184,6 +186,22 @@ def qltk_enabled() -> bool:
     return bool(data.get("enabled", False))
 
 
+def desktop_dimensions(game_width: int, game_height: int, with_qltk: bool) -> tuple[int, int]:
+    """Keep Unity render small, but give the large WinForms manager its own desktop."""
+    if not with_qltk:
+        return game_width, game_height
+    width, height = 1280, 800
+    if QLTK_DISPLAY_SETTINGS.is_file():
+        data = json.loads(QLTK_DISPLAY_SETTINGS.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("QLTK display config must be an object")
+        width, height = data["width"], data["height"]
+    if (type(width) is not int or type(height) is not int or
+        not 1024 <= width <= 1920 or not 650 <= height <= 1080):
+        raise ValueError("QLTK desktop must be 1024..1920 x 650..1080")
+    return max(width, game_width), max(height, game_height)
+
+
 def validate():
     if platform.machine().lower() not in ("x86_64", "amd64"):
         raise RuntimeError("Altare native runner is only for Linux x86_64")
@@ -213,7 +231,7 @@ def main():
     data = json.loads(saved_size.read_text()) if saved_size.is_file() else {}
     width, height = map(int, data.get(selected_key(), list(default_size)))
     use_qltk = qltk_enabled()
-    desktop_width, desktop_height = (max(width, 800), max(height, 600)) if use_qltk else (width, height)
+    desktop_width, desktop_height = desktop_dimensions(width, height, use_qltk)
     if not (320 <= width <= 960 and 240 <= height <= 720):
         raise RuntimeError("Resolution out of supported range")
     log(f"Native x86_64 Wine (no Box64): {PROFILE['name']} at {width}x{height}")
@@ -228,6 +246,8 @@ def main():
     env_wine["WINEDEBUG"] = "-all,err+all"
     env_wine["WINEESYNC"] = "0"
     env_wine["WINEFSYNC"] = "0"
+    if use_qltk and FONTS_CONFIG.is_file():
+        env_wine["FONTCONFIG_FILE"] = str(FONTS_CONFIG)
     vnc_scale = bool(settings.get("scale", False)) and (desktop_width > 640 or desktop_height > 480)
     RUNTIME.mkdir(parents=True, exist_ok=True)
     SESSION_FILE.unlink(missing_ok=True)

@@ -24,6 +24,7 @@ from native_setup import (ROOT, RUNTIME, PKGROOT, BIN_XVFB, XKB_DATA,
 sys.path.insert(0, str(ROOT / "scripts"))
 from game_profiles import selected_key, PROFILES
 from install_game import (TIENNVO_QLTK, source_archive, validate_archive)
+from qltk_fonts import install_fonts
 
 GAME = ROOT / PROFILES["tiennvo"]["directory"]
 PREFIX = RUNTIME / ("altare-" + PROFILES["tiennvo"]["wineprefix"])
@@ -206,6 +207,7 @@ def main() -> None:
     verify_source(archive)
     unpack_qltk(archive)
     install_mono()
+    install_fonts()
     temp = SETTINGS.with_suffix(".tmp")
     try:
         temp.write_text(json.dumps({"enabled": True}), encoding="utf-8")

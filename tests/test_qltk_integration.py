@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from scripts.game_profiles import PROFILES
 import native_run
 import qltk_setup
+import qltk_fonts
+import xml.etree.ElementTree as ET
 from scripts.install_game import TIENNVO_QLTK
 
 
@@ -51,6 +53,29 @@ class QltkIntegrationTest(unittest.TestCase):
                     z.writestr(name, b"not-encrypted")
             with self.assertRaisesRegex(RuntimeError, "Unexpected encrypted files"):
                 qltk_setup.verify_source(archive)
+
+
+    def test_desktop_separate_from_unity_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "desktop.json"
+            with patch.object(native_run, "QLTK_DISPLAY_SETTINGS", config):
+                self.assertEqual(native_run.desktop_dimensions(400, 340, False), (400, 340))
+                self.assertEqual(native_run.desktop_dimensions(400, 340, True), (1280, 800))
+                config.write_text(json.dumps({"width": 1440, "height": 900}))
+                self.assertEqual(native_run.desktop_dimensions(400, 340, True), (1440, 900))
+                config.write_text(json.dumps({"width": 800, "height": 600}))
+                with self.assertRaises(ValueError):
+                    native_run.desktop_dimensions(400, 340, True)
+
+    def test_rootless_font_config(self):
+        source = Path("/tmp/Fonts & More")
+        config = qltk_fonts.config_xml(source)
+        root = ET.fromstring(config)
+        self.assertEqual(root.tag, "fontconfig")
+        self.assertIn(str(source), [entry.text for entry in root.findall("dir")])
+        self.assertIn("DejaVu Sans", config)
+        self.assertIn("Tahoma", config)
+        self.assertEqual(qltk_fonts.WINEPREFIX.name, "altare-wineprefix-tiennvo")
 
     def test_mono_download_checksum_is_pinned(self):
         self.assertEqual(len(qltk_setup.MONO_SHA256), 64)
