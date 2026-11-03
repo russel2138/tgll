@@ -35,7 +35,7 @@ LOG = RUNTIME / "upde-dotnet48-install.log"
 CACHE = RUNTIME / "upde-dotnet-download-cache"
 WINETRICKS_COMMIT = "f3890f670867b5ffbc3938726db45c0f7d16c8ba"
 WINETRICKS_GIT_BLOB = "c166340f33c9af2bcc76a90618fdcf99d90c2253"
-WINETRICKS_SIZE = 843116
+WINETRICKS_SIZE = 873846
 WINETRICKS_URL = ("https://raw.githubusercontent.com/Winetricks/winetricks/" +
                   WINETRICKS_COMMIT + "/src/winetricks")
 NETFX_RELEASE = 528040
