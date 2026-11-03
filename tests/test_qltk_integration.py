@@ -18,7 +18,7 @@ from scripts.install_game import TIENNVO_QLTK
 
 class QltkIntegrationTest(unittest.TestCase):
     def test_tiennvo_prefix_isolated(self):
-        self.assertEqual(native_run.WINEPREFIX.name, "altare-wineprefix-tiennvo")
+        self.assertEqual(qltk_setup.PREFIX.name, "altare-wineprefix-tiennvo")
         self.assertEqual(PROFILES["tiennvo"]["directory"], "game-tiennvo")
         self.assertEqual(len(TIENNVO_QLTK), 7)
 
