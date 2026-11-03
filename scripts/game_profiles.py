@@ -22,6 +22,15 @@ PROFILES = {
         "directory": "jar-game",
         "jar": "game.jar",
     },
+    "upde": {
+        "name": "TiennVo Up De Basic",
+        "directory": "game-upde",
+        "exe": "DragonBoy166.exe",
+        "data": "DragonBoy166_Data",
+        "wineprefix": "wineprefix-upde",
+        "manager": "QLTK.exe",
+        "engine": "unity_mono",
+    },
     "tiennvo": {
         "name": "NRO TiennVo",
         "directory": "game-tiennvo",
