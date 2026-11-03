@@ -46,6 +46,31 @@ class ArchiveInventory(unittest.TestCase):
         self.assertTrue(ARCHIVE.is_file(), "Archive not found in repository")
         print("\nARCHIVE:", ARCHIVE.name, "bytes:", ARCHIVE.stat().st_size, flush=True)
         with zipfile.ZipFile(ARCHIVE) as z:
+            # Keep any account/credential files private. Only general instructions
+            # and runtime metadata are inspected; never execute the archive.
+            guide = z.read("Hướng dẫn sử dụng.txt")
+            text = ""
+            for encoding in ("utf-8-sig", "cp1258", "cp1252"):
+                try:
+                    text = guide.decode(encoding)
+                    break
+                except UnicodeDecodeError:
+                    pass
+            print("GUIDE_PREVIEW (sanitized):",flush=True)
+            import re
+            for line in text.splitlines()[:60]:
+                if re.search(r"password|mật khẩu|tài khoản|token|key|@|sdt|phone|số điện thoại",line,re.I):
+                    continue
+                print("  ",line[:160],flush=True)
+            for name in ("QLTK.exe.config", "QLTK PET.exe.config"):
+                data=z.read(name).decode("utf-8-sig", errors="replace")
+                runtime=re.findall(r'(?i)(?:supportedRuntime|targetFramework|sku|version)[^\n]{0,160}',data)
+                print("CONFIG",name,"runtime",runtime[:8],flush=True)
+            for name in ("Run/Dragonboy_vn_v229_Data/globalgamemanagers",
+                         "DragonBoy166_Data/globalgamemanagers"):
+                b=z.read(name)
+                versions=re.findall(rb"20[0-3][0-9]\.[0-9]{1,2}\.[0-9]{1,3}[afbp][0-9]{1,4}",b)
+                print("UNITY_VERSION",name,sorted(set(v.decode("ascii") for v in versions))[:8],flush=True)
             entries = [x for x in z.infolist() if not x.is_dir()]
             print("MEMBERS:", len(entries), "UNCOMPRESSED:", sum(x.file_size for x in entries), flush=True)
             print("ENCRYPTED:", sum(bool(x.flag_bits & 1) for x in entries), flush=True)
