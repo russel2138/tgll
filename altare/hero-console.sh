@@ -9,6 +9,7 @@ PASS=/root/.vnc/passwd
 PASS_TXT=/root/vnc-password.txt
 LOG=/opt/nroemu/hero.log
 VNCLOG=/opt/nroemu/vnc.log
+XSTARTUP=/root/.vnc/hero-xstartup
 
 vnc_pid() { pgrep -f '^/usr/bin/Xtigervnc :1 ' | head -n1 || true; }
 hero_pid() { pgrep -f '^java .*HERO-Emulator-V2\.jar$' | head -n1 || true; }
@@ -58,21 +59,27 @@ start() {
     printf '%s\n' "$PASSWORD" | tigervncpasswd -f > "$PASS" || return 1
     chmod 600 "$PASS"
   fi
+  # Run a minimal X session instead of Debian's default Xtigervnc-session,
+  # which launches the unwanted clipboard settings panel (vncconfig).
+  cat > "$XSTARTUP" <<'HERO_XSTARTUP'
+#!/bin/sh
+exec sleep infinity
+HERO_XSTARTUP
+  chmod 700 "$XSTARTUP"
   OLD="$(vnc_pid)"
   if [ -n "$OLD" ] && ! tr '\0' ' ' < "/proc/$OLD/cmdline" | grep -Eq -- '-rfbport[[:space:]]+25627([[:space:]]|$)'; then
     tigervncserver -kill :1 >/dev/null 2>&1 || return 1
   fi
   if [ -z "$(vnc_pid)" ]; then
     tigervncserver :1 -geometry 1280x800 -depth 24 -rfbport "$PORT" \
+      -xstartup "$XSTARTUP" \
       -localhost no -SecurityTypes VncAuth -PasswordFile "$PASS" >> "$VNCLOG" 2>&1 || {
       echo "VNC failed:"; tail -n 20 "$VNCLOG"; return 1;
     }
     sleep 2
   fi
   if [ -z "$(vnc_pid)" ]; then echo "VNC not running"; return 1; fi
-  # TigerVNC's default desktop session may start vncconfig as a visible
-  # clipboard settings window. It is not needed for HERO; close it at
-  # each start without touching the VNC server or the Java application.
+  # Cleanup only; the custom X startup prevents future clipboard popups.
   pkill -x vncconfig 2>/dev/null || true
 
   if [ -z "$(hero_pid)" ]; then
