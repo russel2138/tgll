@@ -28,6 +28,9 @@ maximize() {
   [ -n "$pid" ] || { echo "[hero] HERO is not running"; return 1; }
   for attempt in $(seq 1 20); do
     win="$(DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool search --onlyvisible --pid "$pid" 2>/dev/null | head -n 1)"
+    if [ -z "$win" ]; then
+      win="$(DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool search --onlyvisible --name "HERO" 2>/dev/null | head -n 1)"
+    fi
     if [ -n "$win" ]; then
       DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool windowmove "$win" 0 0
       DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool windowsize "$win" 1280 800
@@ -96,13 +99,25 @@ run() {
     logs) tail -n 60 "$LOG" "$VNCLOG" 2>/dev/null ;;
     pass) cat "$PASS_TXT" 2>/dev/null || echo "Run start first" ;;
     vnc) echo "$HOST::$PORT" ;;
-    update) git -C /opt/tgll pull --ff-only && echo "Repo updated; HERO JAR unchanged" ;;
+    update)
+      if git -C /opt/tgll pull --ff-only; then
+        echo "Repo updated; HERO JAR unchanged"
+        if [ "${HERO_CONSOLE_MODE:-0}" = 1 ]; then
+          echo "Reloading HERO console and applying fullscreen window..."
+          exec bash /opt/tgll/altare/hero-console.sh
+        fi
+      else
+        echo "Update failed; existing session continues"
+        return 1
+      fi
+      ;;
     help) echo "Commands: start stop restart status logs pass vnc maximize update exit" ;;
     exit) return 99 ;;
     *) echo "Unknown command: $1"; return 1 ;;
   esac
 }
 if [ "$#" -gt 0 ]; then run "$1"; exit $?; fi
+export HERO_CONSOLE_MODE=1
 echo "HERO V2 console ready (commands: help)"
 start || true
 while IFS= read -r LINE; do
