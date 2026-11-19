@@ -9,7 +9,7 @@ PASS=/root/.vnc/passwd
 PASS_TXT=/root/vnc-password.txt
 LOG=/opt/nroemu/hero.log
 VNCLOG=/opt/nroemu/vnc.log
-XSTARTUP=/root/.vnc/hero-xstartup
+VNC_SESSION_MARKER="$ROOT/.hero-vnc-noxstartup-v1"
 
 vnc_pid() { pgrep -f '^/usr/bin/Xtigervnc :1 ' | head -n1 || true; }
 hero_pid() { pgrep -f '^java .*HERO-Emulator-V2\.jar$' | head -n1 || true; }
@@ -59,35 +59,36 @@ start() {
     printf '%s\n' "$PASSWORD" | tigervncpasswd -f > "$PASS" || return 1
     chmod 600 "$PASS"
   fi
-  # Run a minimal X session instead of Debian's default Xtigervnc-session,
-  # which launches the unwanted clipboard settings panel (vncconfig).
-  cat > "$XSTARTUP" <<'HERO_XSTARTUP'
-#!/bin/sh
-exec sleep infinity
-HERO_XSTARTUP
-  chmod 700 "$XSTARTUP"
+  # Debian Bookworm TigerVNC starts a system X11 session by default,
+  # which may spawn a visible clipboard configuration window.
+  # No desktop session is needed for the HERO Java GUI.
+  # Migrate an existing session once so update can apply this change.
+  if [ ! -f "$VNC_SESSION_MARKER" ] && [ -n "$(vnc_pid)" ]; then
+    echo "[hero] Replacing the old VNC session with headless mode (one-time)"
+    PID="$(hero_pid)"
+    if [ -n "$PID" ]; then kill "$PID" 2>/dev/null || true; fi
+    tigervncserver -kill :1 >/dev/null 2>&1 || true
+    sleep 1
+  fi
   OLD="$(vnc_pid)"
   if [ -n "$OLD" ] && ! tr '\0' ' ' < "/proc/$OLD/cmdline" | grep -Eq -- '-rfbport[[:space:]]+25627([[:space:]]|$)'; then
     tigervncserver -kill :1 >/dev/null 2>&1 || return 1
   fi
   if [ -z "$(vnc_pid)" ]; then
     tigervncserver :1 -geometry 1280x800 -depth 24 -rfbport "$PORT" \
-      -xstartup "$XSTARTUP" \
+      -noxstartup -autokill no \
       -localhost no -SecurityTypes VncAuth -PasswordFile "$PASS" >> "$VNCLOG" 2>&1 || {
       echo "VNC failed:"; tail -n 20 "$VNCLOG"; return 1;
     }
     sleep 2
   fi
   if [ -z "$(vnc_pid)" ]; then echo "VNC not running"; return 1; fi
-  # Debian's clipboard helper is named tigervncconfig, NOT vncconfig.
-  # Remove any old visible helper window and relaunch it in hidden mode
-  # so clipboard synchronization can still work without the grey panel.
+  # Never start a clipboard helper in this headless session.
+  # Kill remnants if an older session had been running.
   pkill -x tigervncconfig 2>/dev/null || true
   pkill -x vncconfig 2>/dev/null || true
-  if command -v tigervncconfig >/dev/null 2>&1; then
-    DISPLAY=:1 XAUTHORITY=/root/.Xauthority \
-      nohup tigervncconfig -nowin >> "$VNCLOG" 2>&1 < /dev/null &
-  fi
+  touch "$VNC_SESSION_MARKER"
+  echo "[hero] VNC started without an X desktop session or clipboard panel"
 
   if [ -z "$(hero_pid)" ]; then
     ( cd "$ROOT" && DISPLAY=:1 XAUTHORITY=/root/.Xauthority \
