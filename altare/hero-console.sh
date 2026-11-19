@@ -13,6 +13,33 @@ VNCLOG=/opt/nroemu/vnc.log
 vnc_pid() { pgrep -f '^/usr/bin/Xtigervnc :1 ' | head -n1 || true; }
 hero_pid() { pgrep -f '^java .*HERO-Emulator-V2\.jar$' | head -n1 || true; }
 
+# Fill the VNC desktop with the HERO application window (X11).
+# xdotool resizes the X11 window directly, even without a window manager.
+maximize() {
+  if ! command -v xdotool >/dev/null 2>&1; then
+    echo "[hero] Installing window resize helper xdotool..."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y xdotool >/dev/null 2>&1 || {
+      echo "[hero] Cannot install xdotool; HERO can still run."
+      return 1
+    }
+  fi
+  local pid win attempt
+  pid="$(hero_pid)"
+  [ -n "$pid" ] || { echo "[hero] HERO is not running"; return 1; }
+  for attempt in $(seq 1 20); do
+    win="$(DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool search --onlyvisible --pid "$pid" 2>/dev/null | head -n 1)"
+    if [ -n "$win" ]; then
+      DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool windowmove "$win" 0 0
+      DISPLAY=:1 XAUTHORITY=/root/.Xauthority xdotool windowsize "$win" 1280 800
+      echo "[hero] HERO window expanded to 1280x800 (window $win)"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "[hero] Window not detected yet; retry with: hero maximize"
+  return 1
+}
+
 start() {
   if [ ! -s "$JAR" ]; then echo "HERO JAR missing: $JAR"; return 1; fi
   mkdir -p /root/.vnc "$ROOT"
@@ -48,6 +75,7 @@ start() {
   if [ -z "$(hero_pid)" ]; then
     echo "HERO failed:"; tail -n 30 "$LOG"; return 1
   fi
+  maximize || true
   echo "HERO RUNNING: $(hero_pid)"
   echo "TigerVNC: $HOST::$PORT"
   echo "Password: hero pass"
@@ -63,12 +91,13 @@ run() {
     start) start ;;
     stop) stop ;;
     restart) stop; sleep 2; start ;;
+    maximize) maximize ;;
     status) echo "VNC PID: $(vnc_pid)"; echo "HERO PID: $(hero_pid)" ;;
     logs) tail -n 60 "$LOG" "$VNCLOG" 2>/dev/null ;;
     pass) cat "$PASS_TXT" 2>/dev/null || echo "Run start first" ;;
     vnc) echo "$HOST::$PORT" ;;
     update) git -C /opt/tgll pull --ff-only && echo "Repo updated; HERO JAR unchanged" ;;
-    help) echo "Commands: start stop restart status logs pass vnc update exit" ;;
+    help) echo "Commands: start stop restart status logs pass vnc maximize update exit" ;;
     exit) return 99 ;;
     *) echo "Unknown command: $1"; return 1 ;;
   esac
