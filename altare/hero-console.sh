@@ -79,8 +79,15 @@ HERO_XSTARTUP
     sleep 2
   fi
   if [ -z "$(vnc_pid)" ]; then echo "VNC not running"; return 1; fi
-  # Cleanup only; the custom X startup prevents future clipboard popups.
+  # Debian's clipboard helper is named tigervncconfig, NOT vncconfig.
+  # Remove any old visible helper window and relaunch it in hidden mode
+  # so clipboard synchronization can still work without the grey panel.
+  pkill -x tigervncconfig 2>/dev/null || true
   pkill -x vncconfig 2>/dev/null || true
+  if command -v tigervncconfig >/dev/null 2>&1; then
+    DISPLAY=:1 XAUTHORITY=/root/.Xauthority \
+      nohup tigervncconfig -nowin >> "$VNCLOG" 2>&1 < /dev/null &
+  fi
 
   if [ -z "$(hero_pid)" ]; then
     ( cd "$ROOT" && DISPLAY=:1 XAUTHORITY=/root/.Xauthority \
