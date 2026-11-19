@@ -70,6 +70,11 @@ start() {
     sleep 2
   fi
   if [ -z "$(vnc_pid)" ]; then echo "VNC not running"; return 1; fi
+  # TigerVNC's default desktop session may start vncconfig as a visible
+  # clipboard settings window. It is not needed for HERO; close it at
+  # each start without touching the VNC server or the Java application.
+  pkill -x vncconfig 2>/dev/null || true
+
   if [ -z "$(hero_pid)" ]; then
     ( cd "$ROOT" && DISPLAY=:1 XAUTHORITY=/root/.Xauthority \
       nohup java -Xms64m -Xmx384m -jar "$JAR" >> "$LOG" 2>&1 < /dev/null & )
